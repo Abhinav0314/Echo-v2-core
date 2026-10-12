@@ -62,6 +62,9 @@ interface SongRepository {
 
     fun insertSong(songEntity: SongEntity): Flow<Long>
 
+    /** Refresh verified selected-track metadata without replacing library/download/history state. */
+    suspend fun refreshTrackMetadata(track: Track)
+
     fun updateThumbnailsSongEntity(
         thumbnail: String,
         videoId: String,

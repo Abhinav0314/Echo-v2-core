@@ -32,6 +32,7 @@ kotlin {
         namespace = "com.maxrave.data"
         compileSdk = 37
         minSdk = 26
+        withHostTest {}
     }
 
     room {
@@ -70,6 +71,8 @@ kotlin {
         commonMain {
             dependencies {
                 implementation(projects.common)
+                implementation(projects.echo.contracts)
+                implementation(libs.supabase.postgrest)
                 implementation(projects.domain)
                 implementation(projects.aiService)
                 implementation(projects.autoEqService)
@@ -116,6 +119,7 @@ kotlin {
                 // commonMain by default and will correctly pull the Android artifacts of any KMP
                 // dependencies declared in commonMain.
                 implementation(libs.koin.android)
+                implementation(projects.echo.librarySync)
                 implementation(projects.media3)
                 implementation(libs.room.ktx)
                 // Login sync: the phone sends sign-ins to the Desktop

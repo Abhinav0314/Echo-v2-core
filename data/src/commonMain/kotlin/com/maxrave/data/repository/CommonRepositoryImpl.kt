@@ -206,7 +206,8 @@ internal class CommonRepositoryImpl(
                             // costs nothing, DataStore skips equal writes.
                             dataStoreManager.putString(
                                 Promo.cacheKey(isDevBuild),
-                                config.promos?.toString() ?: "[]",
+                                // Echo never displays upstream maintainer campaigns.
+                                "[]",
                             )
                         }.onFailure {
                             Logger.e("RemoteConfig", "TIDAL remote config fetch failed: ${it.message}")

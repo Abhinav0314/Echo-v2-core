@@ -1,3 +1,6 @@
+import club.vibescape.echo.contracts.*
+import com.maxrave.data.echo.*
+import kotlinx.serialization.json.*
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -43,6 +46,7 @@ import com.maxrave.domain.data.type.PlaylistType
 import com.maxrave.domain.data.type.RecentlyType
 import com.maxrave.domain.extension.now
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDateTime
 
 /**
@@ -55,6 +59,39 @@ private const val PLACEHOLDER_ALBUM_NAME = "Album"
 
 @Dao
 interface DatabaseDao {
+    @Transaction
+    suspend fun echoApplyProjection(block: suspend () -> Unit) { block() }
+    @Query("UPDATE song SET liked=0, favoriteAt=NULL")
+    suspend fun echoClearSongLikes()
+    @Query("UPDATE album SET liked=0, favoriteAt=NULL")
+    suspend fun echoClearAlbumLikes()
+    @Query("UPDATE playlist SET liked=0, favoriteAt=NULL")
+    suspend fun echoClearPlaylistLikes()
+    @Query("UPDATE artist SET followed=0, followedAt=NULL")
+    suspend fun echoClearArtistFollows()
+    @Query("SELECT channelId FROM event_artist WHERE eventId=:eventId")
+    suspend fun echoHistoryArtistIds(eventId:Long):List<String>
+    @Query("DELETE FROM pair_song_local_playlist WHERE playlistId=:playlistId")
+    suspend fun echoClearPlaylistEntries(playlistId:Long)
+    /** Cache repair only: never replace a song or mutate its user-owned state. */
+    @Query(
+        "UPDATE song SET artistId = COALESCE(:artistIdsJson, artistId), " +
+            "artistName = COALESCE(:artistNamesJson, artistName), " +
+            "albumId = COALESCE(:albumId, albumId), albumName = COALESCE(:albumName, albumName), " +
+            "durationSeconds = CASE WHEN :durationSeconds > 0 THEN :durationSeconds ELSE durationSeconds END, " +
+            "duration = CASE WHEN :durationSeconds > 0 THEN COALESCE(:duration, duration) ELSE duration END " +
+            "WHERE videoId = :videoId",
+    )
+    suspend fun refreshTrackMetadata(
+        videoId: String,
+        artistIdsJson: String?,
+        artistNamesJson: String?,
+        albumId: String?,
+        albumName: String?,
+        durationSeconds: Int?,
+        duration: String?,
+    ): Int
+
     // Transaction request with multiple queries
     @Transaction
     suspend fun getAllRecentData(): List<RecentlyType> {
@@ -268,14 +305,14 @@ interface DatabaseDao {
     ): Int
 
     @Query("UPDATE song SET liked = :liked, favoriteAt = :favoriteAt WHERE videoId = :videoId")
-    suspend fun updateLiked(
+    suspend fun echoRawUpdateLiked(
         liked: Int,
         videoId: String,
         favoriteAt: LocalDateTime? = if (liked == 1) now() else null,
     )
 
     @Insert(onConflict = OnConflictStrategy.Companion.IGNORE)
-    suspend fun insertSong(song: SongEntity): Long
+    suspend fun echoRawInsertSong(song: SongEntity): Long
 
     /**
      * Stores a batch of tracks in one transaction.
@@ -460,7 +497,7 @@ interface DatabaseDao {
     ): List<ArtistEntity>
 
     @Insert(onConflict = OnConflictStrategy.Companion.IGNORE)
-    suspend fun insertArtist(artist: ArtistEntity)
+    suspend fun echoRawInsertArtist(artist: ArtistEntity)
 
     @Query("UPDATE artist SET thumbnails = :thumbnails WHERE channelId = :channelId")
     suspend fun updateArtistImage(
@@ -487,7 +524,7 @@ interface DatabaseDao {
     suspend fun upsertArtistMotion(motion: ArtistMotionEntity)
 
     @Query("UPDATE artist SET followed = :followed, followedAt = :followedAt WHERE channelId = :channelId")
-    suspend fun updateFollowed(
+    suspend fun echoRawUpdateFollowed(
         followed: Int,
         channelId: String,
         followedAt: LocalDateTime? = if (followed == 1) now() else null,
@@ -516,10 +553,10 @@ interface DatabaseDao {
     ): List<AlbumEntity>
 
     @Insert(onConflict = OnConflictStrategy.Companion.IGNORE)
-    suspend fun insertAlbum(album: AlbumEntity): Long
+    suspend fun echoRawInsertAlbum(album: AlbumEntity): Long
 
     @Query("UPDATE album SET liked = :liked, favoriteAt = :favoriteAt  WHERE browseId = :browseId")
-    suspend fun updateAlbumLiked(
+    suspend fun echoRawUpdateAlbumLiked(
         liked: Int,
         browseId: String,
         favoriteAt: LocalDateTime? = if (liked == 1) now() else null,
@@ -564,16 +601,16 @@ interface DatabaseDao {
     ): List<PlaylistEntity>
 
     @Insert(onConflict = OnConflictStrategy.Companion.IGNORE)
-    suspend fun insertPlaylist(playlist: PlaylistEntity)
+    suspend fun echoRawInsertPlaylist(playlist: PlaylistEntity)
 
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
-    suspend fun insertAndReplacePlaylist(playlist: PlaylistEntity)
+    suspend fun echoRawInsertAndReplacePlaylist(playlist: PlaylistEntity)
 
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertRadioPlaylist(playlist: PlaylistEntity)
 
     @Query("UPDATE playlist SET liked = :liked, favoriteAt = :favoriteAt WHERE id = :playlistId")
-    suspend fun updatePlaylistLiked(
+    suspend fun echoRawUpdatePlaylistLiked(
         liked: Int,
         playlistId: String,
         favoriteAt: LocalDateTime? = if (liked == 1) now() else null,
@@ -606,19 +643,19 @@ interface DatabaseDao {
 
     // Local Playlist
     @Query("SELECT * FROM local_playlist ORDER BY inLibrary DESC LIMIT :limit OFFSET :offset")
-    suspend fun getAllLocalPlaylists(
+    suspend fun echoRawGetAllLocalPlaylists(
         limit: Int,
         offset: Int,
     ): List<LocalPlaylistEntity>
 
     @Query("SELECT * FROM local_playlist WHERE downloadState = 1 OR downloadState = 2 LIMIT :limit OFFSET :offset")
-    suspend fun getAllDownloadingLocalPlaylists(
+    suspend fun echoRawGetAllDownloadingLocalPlaylists(
         limit: Int,
         offset: Int,
     ): List<LocalPlaylistEntity>
 
     @Query("SELECT * FROM local_playlist WHERE id = :id")
-    suspend fun getLocalPlaylist(id: Long): LocalPlaylistEntity?
+    suspend fun echoRawGetLocalPlaylist(id: Long): LocalPlaylistEntity?
 
     /**
      * Returns the generated `local_playlist.id`, or -1 when IGNORE dropped the row.
@@ -627,7 +664,7 @@ interface DatabaseDao {
      * Callers that only create a playlist can keep ignoring the value.
      */
     @Insert(onConflict = OnConflictStrategy.Companion.IGNORE)
-    suspend fun insertLocalPlaylist(localPlaylist: LocalPlaylistEntity): Long
+    suspend fun echoRawInsertLocalPlaylist(localPlaylist: LocalPlaylistEntity): Long
 
     /**
      * Creates a playlist and its `pair_song_local_playlist` rows in one transaction.
@@ -643,8 +680,10 @@ interface DatabaseDao {
         localPlaylist: LocalPlaylistEntity,
         videoIds: List<String>,
     ): Long {
+        return EchoLibraryHooks.transaction {
+
         val playlistId = insertLocalPlaylist(localPlaylist)
-        if (playlistId == -1L) return -1L
+        if (playlistId == -1L) return@transaction -1L
         val addedAt = now()
         videoIds.forEachIndexed { index, videoId ->
             insertPairSongLocalPlaylist(
@@ -656,26 +695,28 @@ interface DatabaseDao {
                 ),
             )
         }
-        return playlistId
+        return@transaction playlistId
+
+        }
     }
 
     @Query("DELETE FROM local_playlist WHERE id = :id")
-    suspend fun deleteLocalPlaylist(id: Long)
+    suspend fun echoRawDeleteLocalPlaylist(id: Long)
 
     @Query("UPDATE local_playlist SET title = :title WHERE id = :id")
-    suspend fun updateLocalPlaylistTitle(
+    suspend fun echoRawUpdateLocalPlaylistTitle(
         title: String,
         id: Long,
     )
 
     @Query("UPDATE local_playlist SET tracks = :tracks WHERE id = :id")
-    suspend fun updateLocalPlaylistTracks(
+    suspend fun echoRawUpdateLocalPlaylistTracks(
         tracks: List<String>,
         id: Long,
     )
 
     @Query("UPDATE local_playlist SET thumbnail = :thumbnail WHERE id = :id")
-    suspend fun updateLocalPlaylistThumbnail(
+    suspend fun echoRawUpdateLocalPlaylistThumbnail(
         thumbnail: String,
         id: Long,
     )
@@ -694,7 +735,7 @@ interface DatabaseDao {
     )
 
     @Query("SELECT * FROM local_playlist WHERE downloadState = 3 ORDER BY downloadedAt DESC LIMIT :limit OFFSET :offset")
-    suspend fun getDownloadedLocalPlaylists(
+    suspend fun echoRawGetDownloadedLocalPlaylists(
         limit: Int,
         offset: Int,
     ): List<LocalPlaylistEntity>
@@ -715,10 +756,10 @@ interface DatabaseDao {
     suspend fun unsyncLocalPlaylist(id: Long)
 
     @Query("SELECT downloadState FROM local_playlist WHERE id = :id")
-    fun getDownloadStateFlowOfLocalPlaylist(id: Long): Flow<Int>
+    fun echoRawGetDownloadStateFlowOfLocalPlaylist(id: Long): Flow<Int>
 
     @Query("SELECT tracks FROM local_playlist WHERE id = :id")
-    fun getListTracksFlowOfLocalPlaylist(id: Long): Flow<List<String>>
+    fun echoRawGetListTracksFlowOfLocalPlaylist(id: Long): Flow<List<String>>
 
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertLyrics(lyrics: LyricsEntity)
@@ -771,7 +812,7 @@ interface DatabaseDao {
     suspend fun getQueue(): List<QueueEntity>
 
     @Query("SELECT * FROM local_playlist WHERE youtubePlaylistId = :youtubePlaylistId")
-    suspend fun getLocalPlaylistByYoutubePlaylistId(youtubePlaylistId: String): LocalPlaylistEntity?
+    suspend fun echoRawGetLocalPlaylistByYoutubePlaylistId(youtubePlaylistId: String): LocalPlaylistEntity?
 
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertSetVideoId(setVideoIdEntity: SetVideoIdEntity)
@@ -798,23 +839,23 @@ interface DatabaseDao {
 
     // PairSongLocalPlaylist
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
-    suspend fun insertPairSongLocalPlaylist(pairSongLocalPlaylist: PairSongLocalPlaylist)
+    suspend fun echoRawInsertPairSongLocalPlaylist(pairSongLocalPlaylist: PairSongLocalPlaylist)
 
     @Query("SELECT * FROM pair_song_local_playlist WHERE songId = :videoId AND playlistId = :localPlaylistId LIMIT 1")
-    suspend fun getPlaylistPairOfSong(
+    suspend fun echoRawGetPlaylistPairOfSong(
         videoId: String,
         localPlaylistId: Long,
     ): PairSongLocalPlaylist
 
     @Query("SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId ORDER BY position ASC LIMIT :limit OFFSET :offset")
-    suspend fun getPlaylistPairSong(
+    suspend fun echoRawGetPlaylistPairSong(
         playlistId: Long,
         limit: Int,
         offset: Int,
     ): List<PairSongLocalPlaylist>
 
     @Query("SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId AND position in (:positionList)")
-    suspend fun getPlaylistPairSongByListPosition(
+    suspend fun echoRawGetPlaylistPairSongByListPosition(
         playlistId: Long,
         positionList: List<Int>,
     ): List<PairSongLocalPlaylist>
@@ -841,7 +882,7 @@ interface DatabaseDao {
             "(s.title LIKE :query ESCAPE '\\' OR s.artistName LIKE :query ESCAPE '\\') " +
             "ORDER BY p.position ASC LIMIT :limit",
     )
-    suspend fun searchPlaylistPairSong(
+    suspend fun echoRawSearchPlaylistPairSong(
         playlistId: Long,
         query: String,
         limit: Int,
@@ -851,7 +892,7 @@ interface DatabaseDao {
         "SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId ORDER BY position " +
             "ASC LIMIT 50 OFFSET :offset",
     )
-    suspend fun getPlaylistPairSongByOffset(
+    suspend fun echoRawGetPlaylistPairSongByOffset(
         playlistId: Long,
         offset: Int,
     ): List<PairSongLocalPlaylist>
@@ -860,7 +901,7 @@ interface DatabaseDao {
         "SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId AND inPlaylist > :cutPoint ORDER BY position " +
             "ASC LIMIT 50",
     )
-    suspend fun getPlaylistPairSongByOlderFirst(
+    suspend fun echoRawGetPlaylistPairSongByOlderFirst(
         playlistId: Long,
         cutPoint: LocalDateTime,
     ): List<PairSongLocalPlaylist>
@@ -869,7 +910,7 @@ interface DatabaseDao {
         "SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId AND inPlaylist < :cutPoint ORDER BY position " +
             "DESC LIMIT 50",
     )
-    suspend fun getPlaylistPairSongByNewerFirst(
+    suspend fun echoRawGetPlaylistPairSongByNewerFirst(
         playlistId: Long,
         cutPoint: LocalDateTime,
     ): List<PairSongLocalPlaylist>
@@ -877,21 +918,24 @@ interface DatabaseDao {
     @Query(
         "SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId ORDER BY position DESC LIMIT 1",
     )
-    suspend fun getNewestPlaylistPairSong(playlistId: Long): PairSongLocalPlaylist?
+    suspend fun echoRawGetNewestPlaylistPairSong(playlistId: Long): PairSongLocalPlaylist?
 
     @Query(
         "UPDATE pair_song_local_playlist SET position = :newPosition WHERE playlistId = :playlistId AND songId = :videoId",
     )
-    suspend fun editPositionOfSongInPlaylist(
+    suspend fun echoRawEditPositionOfSongInPlaylist(
         playlistId: Long,
         videoId: String,
         newPosition: Int,
     )
 
+    @Query("UPDATE pair_song_local_playlist SET position=:newPosition WHERE id=:entryId")
+    suspend fun echoRawEditPositionOfEntry(entryId:Int,newPosition:Int)
+
     @Query(
         "SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId ORDER BY position ASC",
     )
-    suspend fun getAllPlaylistPairSongByPosition(playlistId: Long): List<PairSongLocalPlaylist>
+    suspend fun echoRawGetAllPlaylistPairSongByPosition(playlistId: Long): List<PairSongLocalPlaylist>
 
     @Query(
         "UPDATE pair_song_local_playlist SET position = position + 1 WHERE playlistId = :playlistId AND position >= :from AND position < :to",
@@ -928,8 +972,13 @@ interface DatabaseDao {
         fromIndex: Int,
         toIndex: Int,
     ): Boolean {
+        return EchoLibraryHooks.transaction {
+
+        if (getLocalPlaylist(playlistId) == null) return@transaction false
         val pairs = getAllPlaylistPairSongByPosition(playlistId)
-        if (fromIndex !in pairs.indices || toIndex !in pairs.indices) return false
+        if (fromIndex !in pairs.indices || toIndex !in pairs.indices) return@transaction false
+        val reordered = pairs.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        EchoLibraryHooks.mutate(echoOrder(playlistId, reordered))
         val moved = pairs[fromIndex]
         val target = pairs[toIndex].position
         if (fromIndex < toIndex) {
@@ -937,15 +986,17 @@ interface DatabaseDao {
         } else {
             shiftPositionsForward(playlistId, target, moved.position)
         }
-        editPositionOfSongInPlaylist(playlistId, moved.songId, target)
-        return true
+        echoRawEditPositionOfEntry(moved.id, target)
+        return@transaction true
+
+        }
     }
 
     @Query(
         "SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId AND position >= :from AND position < :to ORDER BY position " +
             "LIMIT 50",
     )
-    suspend fun getPlaylistPairSongByFromToDesc(
+    suspend fun echoRawGetPlaylistPairSongByFromToDesc(
         playlistId: Long,
         from: Int,
         to: Int,
@@ -955,7 +1006,7 @@ interface DatabaseDao {
         "SELECT p.* FROM pair_song_local_playlist p JOIN song s ON p.songId = s.videoId WHERE" +
             " p.playlistId = :playlistId ORDER BY s.title ASC LIMIT 50 OFFSET :offset",
     )
-    suspend fun getPlaylistPairSongByTitle(
+    suspend fun echoRawGetPlaylistPairSongByTitle(
         playlistId: Long,
         offset: Int,
     ): List<PairSongLocalPlaylist>
@@ -963,7 +1014,7 @@ interface DatabaseDao {
     @Query(
         "DELETE FROM pair_song_local_playlist WHERE songId = :videoId AND playlistId = :playlistId",
     )
-    suspend fun deletePairSongLocalPlaylist(
+    suspend fun echoRawDeletePairSongLocalPlaylist(
         playlistId: Long,
         videoId: String,
     )
@@ -1114,11 +1165,17 @@ interface DatabaseDao {
         durationSecond: Long,
         listenedSecond: Long,
     ): Long {
+        return EchoLibraryHooks.transaction {
+
         val timestamp = now()
 
+        val stableEventId = EchoLibraryHooks.reserveLocalId("history", echoNextHistoryId())
+        val history = PlaybackEventEntity(eventId = stableEventId, timestamp = timestamp, videoId = videoId,
+            albumBrowseId = albumBrowseId, durationSecond = durationSecond, listenedSecond = listenedSecond)
+        EchoLibraryHooks.mutate(history.echoHistory(EchoLibraryHooks.identity("history", stableEventId), channelIds, getSong(videoId)))
         val eventId =
             insertPlaybackEvent(
-                PlaybackEventEntity(
+                PlaybackEventEntity(eventId = stableEventId,
                     timestamp = timestamp,
                     videoId = videoId,
                     albumBrowseId = albumBrowseId,
@@ -1140,7 +1197,9 @@ interface DatabaseDao {
                 ),
             )
         }
-        return eventId
+        return@transaction eventId
+
+        }
     }
 
     @Query("SELECT * FROM playback_event ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
@@ -1157,7 +1216,22 @@ interface DatabaseDao {
     ): List<PlaybackEventEntity>
 
     @Query("DELETE FROM playback_event WHERE timestamp < :cutoffTimestamp")
-    suspend fun deleteOldPlaybackEvents(cutoffTimestamp: LocalDateTime)
+    suspend fun echoRawDeleteOldPlaybackEvents(cutoffTimestamp: LocalDateTime)
+
+    @Query("SELECT * FROM playback_event WHERE timestamp < :cutoffTimestamp")
+    suspend fun echoOldPlaybackEvents(cutoffTimestamp: LocalDateTime): List<PlaybackEventEntity>
+
+    @Transaction
+    suspend fun deleteOldPlaybackEvents(cutoffTimestamp: LocalDateTime) {
+        EchoLibraryHooks.transaction {
+            echoOldPlaybackEvents(cutoffTimestamp).forEach { event ->
+                EchoLibraryHooks.mutate(event.echoHistory(
+                    EchoLibraryHooks.identity("history", event.eventId), emptyList(),
+                ).copy(deleted = true))
+            }
+            echoRawDeleteOldPlaybackEvents(cutoffTimestamp)
+        }
+    }
 
     // ===== Clear listening history + drop orphaned songs =====
     //
@@ -1181,7 +1255,7 @@ interface DatabaseDao {
     // Kotlin to filter them is not an option anyway.
 
     @Query("DELETE FROM playback_event")
-    suspend fun deleteAllPlaybackEvents()
+    suspend fun echoRawDeleteAllPlaybackEvents()
 
     /**
      * Artists cached only because they turned up while browsing.
@@ -1629,4 +1703,223 @@ interface DatabaseDao {
         insertAutoEqEntries(entries)
         upsertAutoEqIndexMeta(meta)
     }
+
+    // Echo v1 boundary: canonical mutation + outbox precede the idempotent upstream projection.
+    // Incoming cloud projection calls echoRaw methods so it cannot generate another outbox entry.
+    @Query("SELECT COALESCE(MAX(id),0)+1 FROM local_playlist")
+    suspend fun echoNextPlaylistId(): Long
+    @Query("SELECT COALESCE(MAX(id),0)+1 FROM pair_song_local_playlist")
+    suspend fun echoNextEntryId(): Long
+    @Query("SELECT COALESCE(MAX(eventId),0)+1 FROM playback_event")
+    suspend fun echoNextHistoryId(): Long
+
+    @Transaction
+    suspend fun updateLiked(liked:Int, videoId:String, favoriteAt:LocalDateTime?=if(liked==1)now() else null) {
+        return EchoLibraryHooks.transaction {
+
+        getSong(videoId)?.let { EchoLibraryHooks.mutate(it.copy(favoriteAt=favoriteAt).echoLike(liked!=1)) }
+        echoRawUpdateLiked(liked,videoId,favoriteAt)
+
+        }
+    }
+    @Transaction
+    suspend fun updateFollowed(followed:Int, channelId:String, followedAt:LocalDateTime?=if(followed==1)now() else null) {
+        return EchoLibraryHooks.transaction {
+
+        getArtist(channelId)?.let { EchoLibraryHooks.mutate(it.copy(followedAt=followedAt).echoFollow(followed!=1)) }
+        echoRawUpdateFollowed(followed,channelId,followedAt)
+
+        }
+    }
+    @Transaction
+    suspend fun updateAlbumLiked(liked:Int,browseId:String,favoriteAt:LocalDateTime?=if(liked==1)now() else null) {
+        return EchoLibraryHooks.transaction {
+
+        getAlbum(browseId)?.let { EchoLibraryHooks.mutate(it.copy(favoriteAt=favoriteAt).echoLike(liked!=1)) }
+        echoRawUpdateAlbumLiked(liked,browseId,favoriteAt)
+
+        }
+    }
+    @Transaction
+    suspend fun updatePlaylistLiked(liked:Int,playlistId:String,favoriteAt:LocalDateTime?=if(liked==1)now() else null) {
+        return EchoLibraryHooks.transaction {
+
+        getPlaylist(playlistId)?.let { EchoLibraryHooks.mutate(it.copy(favoriteAt=favoriteAt).echoLike(liked!=1)) }
+        echoRawUpdatePlaylistLiked(liked,playlistId,favoriteAt)
+
+        }
+    }
+    @Transaction
+    suspend fun insertSong(song:SongEntity):Long {
+        return EchoLibraryHooks.transaction {
+
+        if(song.liked)EchoLibraryHooks.mutate(song.echoLike())
+        return@transaction echoRawInsertSong(song)
+
+        }
+    }
+    @Transaction
+    suspend fun insertArtist(artist:ArtistEntity) {
+        return EchoLibraryHooks.transaction {
+
+        if(artist.followed)EchoLibraryHooks.mutate(artist.echoFollow())
+        echoRawInsertArtist(artist)
+
+        }
+    }
+    @Transaction
+    suspend fun insertAlbum(album:AlbumEntity):Long {
+        return EchoLibraryHooks.transaction {
+
+        if(album.liked)EchoLibraryHooks.mutate(album.echoLike())
+        return@transaction echoRawInsertAlbum(album)
+
+        }
+    }
+    @Transaction
+    suspend fun insertPlaylist(playlist:PlaylistEntity) {
+        return EchoLibraryHooks.transaction {
+
+        if(playlist.liked)EchoLibraryHooks.mutate(playlist.echoLike())
+        echoRawInsertPlaylist(playlist)
+
+        }
+    }
+    @Transaction
+    suspend fun insertAndReplacePlaylist(playlist:PlaylistEntity) {
+        return EchoLibraryHooks.transaction {
+
+        if(playlist.liked)EchoLibraryHooks.mutate(playlist.echoLike())
+        echoRawInsertAndReplacePlaylist(playlist)
+
+        }
+    }
+    @Transaction
+    suspend fun insertLocalPlaylist(localPlaylist:LocalPlaylistEntity):Long {
+        return EchoLibraryHooks.transaction {
+
+        val id = if(localPlaylist.id==0L)EchoLibraryHooks.reservePlaylistId(echoNextPlaylistId()) else localPlaylist.id
+        if(echoRawGetLocalPlaylist(id)!=null)return@transaction -1L
+        val value=localPlaylist.copy(id=id)
+        EchoLibraryHooks.mutate(value.echoPlaylist(EchoLibraryHooks.identity("playlist",id)))
+        return@transaction echoRawInsertLocalPlaylist(value)
+
+        }
+    }
+    @Transaction
+    suspend fun deleteLocalPlaylist(id:Long) {
+        return EchoLibraryHooks.transaction {
+
+        val playlist=getLocalPlaylist(id) ?: return@transaction
+        EchoLibraryHooks.mutate(playlist.echoPlaylist(EchoLibraryHooks.identity("playlist",id),true))
+        echoRawDeleteLocalPlaylist(id)
+
+        }
+    }
+    @Transaction
+    suspend fun updateLocalPlaylistTitle(title:String,id:Long) {
+        return EchoLibraryHooks.transaction {
+
+        val playlist=getLocalPlaylist(id) ?: return@transaction
+        EchoLibraryHooks.mutate(playlist.copy(title=title).echoPlaylist(EchoLibraryHooks.identity("playlist",id)))
+        echoRawUpdateLocalPlaylistTitle(title,id)
+
+        }
+    }
+    @Transaction
+    suspend fun updateLocalPlaylistThumbnail(thumbnail:String,id:Long) {
+        return EchoLibraryHooks.transaction {
+
+        val playlist=getLocalPlaylist(id) ?: return@transaction
+        EchoLibraryHooks.mutate(playlist.copy(thumbnail=thumbnail).echoPlaylist(EchoLibraryHooks.identity("playlist",id)))
+        echoRawUpdateLocalPlaylistThumbnail(thumbnail,id)
+
+        }
+    }
+    @Transaction
+    suspend fun insertPairSongLocalPlaylist(pairSongLocalPlaylist:PairSongLocalPlaylist) {
+        return EchoLibraryHooks.transaction {
+
+        if(getLocalPlaylist(pairSongLocalPlaylist.playlistId)==null)return@transaction
+        val id=if(pairSongLocalPlaylist.id==0)EchoLibraryHooks.reserveLocalId("entry",echoNextEntryId()).toInt() else pairSongLocalPlaylist.id
+        val value=pairSongLocalPlaylist.copy(id=id)
+        getSong(value.songId)?.let { song ->
+            EchoLibraryHooks.mutate(value.echoEntry(EchoLibraryHooks.identity("entry",id.toLong()),EchoLibraryHooks.identity("playlist",value.playlistId),song))
+        }
+        echoRawInsertPairSongLocalPlaylist(value)
+
+        }
+    }
+    @Transaction
+    suspend fun deletePairSongLocalPlaylist(playlistId:Long,videoId:String) {
+        return EchoLibraryHooks.transaction {
+
+        if(getLocalPlaylist(playlistId)==null)return@transaction
+        getAllPlaylistPairSongByPosition(playlistId).filter{it.songId==videoId}.forEach { pair ->
+            getSong(videoId)?.let { song -> EchoLibraryHooks.mutate(pair.echoEntry(EchoLibraryHooks.identity("entry",pair.id.toLong()),EchoLibraryHooks.identity("playlist",playlistId),song,true)) }
+        }
+        echoRawDeletePairSongLocalPlaylist(playlistId,videoId)
+
+        }
+    }
+    @Transaction
+    suspend fun editPositionOfSongInPlaylist(playlistId:Long,videoId:String,newPosition:Int) {
+        return EchoLibraryHooks.transaction {
+
+        if(getLocalPlaylist(playlistId)==null)return@transaction
+        val pairs=getAllPlaylistPairSongByPosition(playlistId).map{if(it.songId==videoId)it.copy(position=newPosition) else it}.sortedBy{it.position}
+        EchoLibraryHooks.mutate(echoOrder(playlistId,pairs))
+        echoRawEditPositionOfSongInPlaylist(playlistId,videoId,newPosition)
+
+        }
+    }
+    @Transaction
+    suspend fun deleteAllPlaybackEvents() {
+        return EchoLibraryHooks.transaction {
+
+        EchoLibraryHooks.mutate(LibraryRecord(LibraryKind.HISTORY_CLEAR,"history",payload=JsonObject(emptyMap()),deleted=true))
+        echoRawDeleteAllPlaybackEvents()
+
+        }
+    }
+    suspend fun getAllLocalPlaylists(limit:Int,offset:Int):List<LocalPlaylistEntity> {
+        val visible=EchoLibraryHooks.visiblePlaylistIds()
+        return if(visible==null)echoRawGetAllLocalPlaylists(limit,offset) else echoRawGetAllLocalPlaylists(Int.MAX_VALUE,0).filter{it.id in visible}.drop(offset).take(limit)
+    }
+    suspend fun getAllDownloadingLocalPlaylists(limit:Int,offset:Int):List<LocalPlaylistEntity> {
+        val visible=EchoLibraryHooks.visiblePlaylistIds()
+        return if(visible==null)echoRawGetAllDownloadingLocalPlaylists(limit,offset) else echoRawGetAllDownloadingLocalPlaylists(Int.MAX_VALUE,0).filter{it.id in visible}.drop(offset).take(limit)
+    }
+    suspend fun getDownloadedLocalPlaylists(limit:Int,offset:Int):List<LocalPlaylistEntity> {
+        val visible=EchoLibraryHooks.visiblePlaylistIds()
+        return if(visible==null)echoRawGetDownloadedLocalPlaylists(limit,offset) else echoRawGetDownloadedLocalPlaylists(Int.MAX_VALUE,0).filter{it.id in visible}.drop(offset).take(limit)
+    }
+    suspend fun getLocalPlaylist(id:Long):LocalPlaylistEntity? {
+        val visible=EchoLibraryHooks.visiblePlaylistIds()
+        return if(visible!=null&&id !in visible)null else echoRawGetLocalPlaylist(id)
+    }
+    suspend fun getLocalPlaylistByYoutubePlaylistId(youtubePlaylistId:String):LocalPlaylistEntity? {
+        val value=echoRawGetLocalPlaylistByYoutubePlaylistId(youtubePlaylistId) ?: return null
+        val visible=EchoLibraryHooks.visiblePlaylistIds()
+        return value.takeIf{visible==null||it.id in visible}
+    }
+
+
+    suspend fun echoPlaylistVisible(id:Long):Boolean = EchoLibraryHooks.visiblePlaylistIds()?.contains(id) ?: true
+    suspend fun getPlaylistPairOfSong(videoId:String,localPlaylistId:Long):PairSongLocalPlaylist { check(echoPlaylistVisible(localPlaylistId)) { "Playlist is not in the current account library." }; return echoRawGetPlaylistPairOfSong(videoId,localPlaylistId) }
+    suspend fun getPlaylistPairSong(playlistId:Long,limit:Int,offset:Int):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetPlaylistPairSong(playlistId,limit,offset) else emptyList()
+    suspend fun getPlaylistPairSongByListPosition(playlistId:Long,positionList:List<Int>):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetPlaylistPairSongByListPosition(playlistId,positionList) else emptyList()
+    suspend fun searchPlaylistPairSong(playlistId:Long,query:String,limit:Int):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawSearchPlaylistPairSong(playlistId,query,limit) else emptyList()
+    suspend fun getPlaylistPairSongByOffset(playlistId:Long,offset:Int):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetPlaylistPairSongByOffset(playlistId,offset) else emptyList()
+    suspend fun getPlaylistPairSongByOlderFirst(playlistId:Long,cutPoint:LocalDateTime):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetPlaylistPairSongByOlderFirst(playlistId,cutPoint) else emptyList()
+    suspend fun getPlaylistPairSongByNewerFirst(playlistId:Long,cutPoint:LocalDateTime):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetPlaylistPairSongByNewerFirst(playlistId,cutPoint) else emptyList()
+    suspend fun getNewestPlaylistPairSong(playlistId:Long):PairSongLocalPlaylist? = if(echoPlaylistVisible(playlistId))echoRawGetNewestPlaylistPairSong(playlistId) else null
+    suspend fun getAllPlaylistPairSongByPosition(playlistId:Long):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetAllPlaylistPairSongByPosition(playlistId) else emptyList()
+    suspend fun getPlaylistPairSongByFromToDesc(playlistId:Long,from:Int,to:Int):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetPlaylistPairSongByFromToDesc(playlistId,from,to) else emptyList()
+    suspend fun getPlaylistPairSongByTitle(playlistId:Long,offset:Int):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetPlaylistPairSongByTitle(playlistId,offset) else emptyList()
+    fun getDownloadStateFlowOfLocalPlaylist(id:Long):Flow<Int> = echoRawGetDownloadStateFlowOfLocalPlaylist(id).map { if(echoPlaylistVisible(id))it else 0 }
+    fun getListTracksFlowOfLocalPlaylist(id:Long):Flow<List<String>> = echoRawGetListTracksFlowOfLocalPlaylist(id).map { if(echoPlaylistVisible(id))it else emptyList() }
+    @Transaction
+    suspend fun updateLocalPlaylistTracks(tracks:List<String>,id:Long) { EchoLibraryHooks.transaction { if(echoPlaylistVisible(id))echoRawUpdateLocalPlaylistTracks(tracks,id) } }
+
 }

@@ -163,6 +163,11 @@ internal class LocalDataSource(
 
     suspend fun getSong(videoId: String) = databaseDao.getSong(videoId)
 
+    suspend fun refreshTrackMetadata(
+        videoId: String, artistIdsJson: String?, artistNamesJson: String?, albumId: String?,
+        albumName: String?, durationSeconds: Int?, duration: String?,
+    ) = databaseDao.refreshTrackMetadata(videoId, artistIdsJson, artistNamesJson, albumId, albumName, durationSeconds, duration)
+
     fun getSongAsFlow(videoId: String) = databaseDao.getSongAsFlow(videoId)
 
     /**

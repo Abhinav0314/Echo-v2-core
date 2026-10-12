@@ -1,6 +1,5 @@
 package com.maxrave.kotlinytmusicscraper.pages
 
-import com.maxrave.kotlinytmusicscraper.models.Album
 import com.maxrave.kotlinytmusicscraper.models.AlbumItem
 import com.maxrave.kotlinytmusicscraper.models.Artist
 import com.maxrave.kotlinytmusicscraper.models.ArtistItem
@@ -10,8 +9,8 @@ import com.maxrave.kotlinytmusicscraper.models.PlaylistItem
 import com.maxrave.kotlinytmusicscraper.models.SongItem
 import com.maxrave.kotlinytmusicscraper.models.YTItem
 import com.maxrave.kotlinytmusicscraper.models.oddElements
+import com.maxrave.kotlinytmusicscraper.models.songByline
 import com.maxrave.kotlinytmusicscraper.models.splitBySeparator
-import com.maxrave.kotlinytmusicscraper.utils.parseTime
 
 data class SearchSummary(
     val title: String,
@@ -26,32 +25,16 @@ data class SearchSummaryPage(
             val subtitle = renderer.subtitle.runs?.splitBySeparator()
             return when {
                 renderer.onTap.watchEndpoint != null -> {
+                    val metadata = renderer.subtitle.runs.orEmpty().songByline()
                     SongItem(
                         id = renderer.onTap.watchEndpoint.videoId ?: return null,
                         title =
                             renderer.title.runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
-                        artists =
-                            subtitle?.getOrNull(1)?.oddElements()?.map {
-                                Artist(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId,
-                                )
-                            } ?: return null,
-                        album =
-                            subtitle.getOrNull(2)?.firstOrNull()?.takeIf { it.navigationEndpoint?.browseEndpoint != null }?.let {
-                                Album(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId!!,
-                                )
-                            },
-                        duration =
-                            subtitle
-                                .lastOrNull()
-                                ?.firstOrNull()
-                                ?.text
-                                ?.parseTime(),
+                        artists = metadata.artists,
+                        album = metadata.album,
+                        duration = metadata.duration,
                         thumbnail = renderer.thumbnail.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                         explicit =
                             renderer.subtitleBadges?.find {
@@ -130,9 +113,10 @@ data class SearchSummaryPage(
                     ?.text
                     ?.runs
                     ?.splitBySeparator()
-                    ?: return null
+                    .orEmpty()
             return when {
                 renderer.isSong -> {
+                    val metadata = renderer.songByline()
                     SongItem(
                         id = renderer.videoId ?: return null,
                         title =
@@ -143,26 +127,9 @@ data class SearchSummaryPage(
                                 ?.runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
-                        artists =
-                            secondaryLine.getOrNull(1)?.oddElements()?.map {
-                                Artist(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId,
-                                )
-                            } ?: return null,
-                        album =
-                            secondaryLine.getOrNull(2)?.firstOrNull()?.takeIf { it.navigationEndpoint?.browseEndpoint != null }?.let {
-                                Album(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId!!,
-                                )
-                            },
-                        duration =
-                            secondaryLine
-                                .lastOrNull()
-                                ?.firstOrNull()
-                                ?.text
-                                ?.parseTime(),
+                        artists = metadata.artists,
+                        album = metadata.album,
+                        duration = metadata.duration,
                         thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                         explicit =
                             renderer.badges?.find {

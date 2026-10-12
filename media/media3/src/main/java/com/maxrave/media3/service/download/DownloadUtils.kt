@@ -55,6 +55,18 @@ internal class DownloadUtils(
 ) : DownloadHandler {
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    /** Restore replaces cache files; all writers must be stopped before promotion. */
+    suspend fun quiesceForRestore() {
+        coroutineScope.coroutineContext[kotlinx.coroutines.Job]?.let { job ->
+            job.cancel()
+            job.join()
+        }
+        kotlinx.coroutines.withContext(Dispatchers.Main) {
+            downloadManager.pauseDownloads()
+            downloadManager.release()
+        }
+    }
+
     private val dataSourceFactory =
         ResolvingDataSource.Factory(
             CacheDataSource

@@ -131,7 +131,7 @@ fun SongEntity.toTrack(): Track {
     val artistName = this.artistName
     if (artistName != null) {
         for (i in 0 until artistName.size) {
-            listArtist.add(Artist(this.artistId?.get(i) ?: "", artistName[i]))
+            listArtist.add(Artist(this.artistId?.getOrNull(i) ?: "", artistName[i]))
         }
     }
     val isSong = (this.thumbnails?.contains("w544") == true && this.thumbnails?.contains("h544") == true)

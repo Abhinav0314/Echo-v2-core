@@ -1,5 +1,7 @@
 package com.maxrave.common
 
+import live.vibescape.echo.EchoConfig
+
 /** Supplied by the application entry point so build variants retain their real identity. */
 data class AppIdentity(
     val applicationId: String,
@@ -9,5 +11,5 @@ data class AppIdentity(
     val isDevBuild: Boolean = false,
 ) {
     val userAgent: String
-        get() = "SimpMusic/$versionName ($applicationId; $platform)"
+        get() = "${EchoConfig.APP_NAME}/$versionName ($applicationId; $platform)"
 }

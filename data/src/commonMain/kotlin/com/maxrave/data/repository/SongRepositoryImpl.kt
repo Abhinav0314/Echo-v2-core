@@ -3,6 +3,7 @@ package com.maxrave.data.repository
 import com.maxrave.common.MERGING_DATA_TYPE
 import com.maxrave.data.db.datasource.LocalDataSource
 import com.maxrave.data.extension.getFullDataFromDB
+import com.maxrave.data.mapping.metadataPatch
 import com.maxrave.data.mapping.toListTrack
 import com.maxrave.data.mapping.toSongItemForDownload
 import com.maxrave.data.mapping.toWatchEndpoint
@@ -201,6 +202,15 @@ internal class SongRepositoryImpl(
     override fun getLikedSongsByArtist(channelId: String): Flow<List<SongEntity>> = localDataSource.getLikedSongsByArtist(channelId)
 
     override fun insertSong(songEntity: SongEntity): Flow<Long> = flow<Long> { emit(localDataSource.insertSong(songEntity)) }.flowOn(Dispatchers.IO)
+
+    override suspend fun refreshTrackMetadata(track: Track) {
+        val patch = track.metadataPatch()
+        if (patch.isEmpty) return
+        withContext(Dispatchers.IO) {
+            localDataSource.refreshTrackMetadata(track.videoId, patch.artistIdsJson, patch.artistNamesJson,
+                patch.albumId, patch.albumName, patch.durationSeconds, patch.duration)
+        }
+    }
 
     override fun updateThumbnailsSongEntity(
         thumbnail: String,

@@ -1,5 +1,7 @@
 package com.maxrave.kotlinytmusicscraper.models
 
+import live.vibescape.echo.EchoConfig
+
 import com.maxrave.kotlinytmusicscraper.models.response.LikeStatus
 
 sealed class YTItem {
@@ -46,7 +48,7 @@ data class SongItem(
     val counterpart: SongItem? = null,
 ) : YTItem() {
     override val shareLink: String
-        get() = "https://simpmusic.org/app/watch?v=$id"
+        get() = "${EchoConfig.BASE_URL}/app/watch?v=$id"
     override val type: YTItemType
         get() = YTItemType.SONG
 
@@ -74,7 +76,7 @@ data class VideoItem(
     val musicVideoType: String? = null,
 ) : YTItem() {
     override val shareLink: String
-        get() = "https://simpmusic.org/app/watch?v=$id"
+        get() = "${EchoConfig.BASE_URL}/app/watch?v=$id"
     override val type: YTItemType
         get() = YTItemType.VIDEO
 }
@@ -91,7 +93,7 @@ data class AlbumItem(
     override val explicit: Boolean = false,
 ) : YTItem() {
     override val shareLink: String
-        get() = "https://simpmusic.org/app/playlist?list=$playlistId"
+        get() = "${EchoConfig.BASE_URL}/app/playlist?list=$playlistId"
     override val type: YTItemType
         get() = YTItemType.ALBUM
 }
@@ -109,7 +111,7 @@ data class PlaylistItem(
     override val explicit: Boolean
         get() = false
     override val shareLink: String
-        get() = "https://simpmusic.org/app/playlist?list=$id"
+        get() = "${EchoConfig.BASE_URL}/app/playlist?list=$id"
     override val type: YTItemType
         get() = YTItemType.PLAYLIST
 }
@@ -125,7 +127,7 @@ data class ArtistItem(
     override val explicit: Boolean
         get() = false
     override val shareLink: String
-        get() = "https://simpmusic.org/app/channel/$id"
+        get() = "${EchoConfig.BASE_URL}/app/channel/$id"
     override val type: YTItemType
         get() = YTItemType.ARTIST
 }

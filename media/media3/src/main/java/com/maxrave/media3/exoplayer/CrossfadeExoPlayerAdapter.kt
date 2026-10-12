@@ -1154,6 +1154,8 @@ internal class CrossfadeExoPlayerAdapter(
     }
 
     override fun clearMediaItems() {
+        currentLoadJob?.cancel()
+        cancelPrecaching()
         coroutineScope.launch {
             playlist.clear()
             localCurrentMediaItemIndex = -1
@@ -1697,6 +1699,9 @@ internal class CrossfadeExoPlayerAdapter(
                     stopPositionUpdates()
                     crossfadeJob?.cancel()
                     crossfadeJob = null
+                    secondaryPlayer?.takeIf { it !== currentPlayer && it !== player }?.let { cleanupPlayerInternal(it) }
+                    secondaryPlayer = null
+                    secondaryPlayerFilter = null
                     setCrossfading(false)
 
                     // 2. Save old player reference
@@ -1795,6 +1800,7 @@ internal class CrossfadeExoPlayerAdapter(
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (player !== currentPlayer && !(isCrossfading && player === secondaryPlayer)) return
                     when (playbackState) {
                         Player.STATE_ENDED -> {
                             Logger.d(TAG, "End of stream reached")
@@ -1826,6 +1832,11 @@ internal class CrossfadeExoPlayerAdapter(
                             // Playback is stalled waiting for data — report buffering
                         }
                     }
+                }
+
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if (player !== currentPlayer && !(isCrossfading && player === secondaryPlayer)) return
+                    internalPlayWhenReady = playWhenReady
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1876,8 +1887,9 @@ internal class CrossfadeExoPlayerAdapter(
                     if (error.isLiveStreamDetected() && currentVideoId != null) {
                         Logger.w(TAG, "$currentVideoId is a live stream; loading it again as HLS")
                         coroutineScope.launch {
+                            if (player !== currentPlayer || playlist.getOrNull(localCurrentMediaItemIndex)?.mediaId != currentVideoId) return@launch
                             precachedPlayers.remove(currentVideoId)?.player?.release()
-                            loadAndPlayTrackInternal(localCurrentMediaItemIndex, 0L, shouldPlay = true)
+                            loadAndPlayTrackInternal(localCurrentMediaItemIndex, 0L, shouldPlay = internalPlayWhenReady)
                         }
                         return
                     }
@@ -1907,10 +1919,11 @@ internal class CrossfadeExoPlayerAdapter(
                                     // Invalidate cached format so ResolvingDataSource fetches a fresh URL
                                     streamRepository.invalidateFormat(currentVideoId)
                                     streamRepository.invalidateFormat("${com.maxrave.common.MERGING_DATA_TYPE.VIDEO}$currentVideoId")
+                                    if (player !== currentPlayer || playlist.getOrNull(localCurrentMediaItemIndex)?.mediaId != currentVideoId) return@launch
                                     // Evict from precache (it may hold a stale player)
                                     precachedPlayers.remove(currentVideoId)?.player?.release()
                                     // Reload the track at the saved position
-                                    loadAndPlayTrackInternal(localCurrentMediaItemIndex, resumePositionMs, shouldPlay = true)
+                                    loadAndPlayTrackInternal(localCurrentMediaItemIndex, resumePositionMs, shouldPlay = internalPlayWhenReady)
                                 } catch (e: Exception) {
                                     if (e is CancellationException) throw e
                                     Logger.e(TAG, "Retry failed: ${e.message}", e)
@@ -2024,6 +2037,9 @@ internal class CrossfadeExoPlayerAdapter(
         crossfadeJob = null
         setCrossfading(false)
 
+        secondaryPlayer?.takeIf { it !== currentPlayer }?.let { cleanupPlayerInternal(it) }
+        secondaryPlayer = null
+        secondaryPlayerFilter = null
         currentPlayer?.let { cleanupPlayerInternal(it) }
         currentPlayer = null
     }

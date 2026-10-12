@@ -21,6 +21,7 @@ kotlin {
         namespace = "com.maxrave.kotlinytmusicscraper"
         compileSdk = 37
         minSdk = 26
+        withHostTest {}
     }
 
     // For iOS targets, this is also where you should
@@ -97,7 +98,9 @@ kotlin {
                 implementation(libs.ffmpeg.kit.audio)
                 implementation(libs.gson)
 
-                implementation(libs.pipepipe.extractor)
+                implementation(libs.pipepipe.extractor.get().toString()) {
+                    exclude(group = "com.google.protobuf", module = "protobuf-java")
+                }
                 implementation(libs.brave.extractor)
                 implementation(libs.okhttp3.okhttp)
             }
@@ -115,7 +118,9 @@ kotlin {
 
         jvmMain {
             dependencies {
-                implementation(libs.pipepipe.extractor)
+                implementation(libs.pipepipe.extractor.get().toString()) {
+                    exclude(group = "com.google.protobuf", module = "protobuf-java")
+                }
                 implementation(libs.brave.extractor)
                 implementation(libs.okhttp3.okhttp)
             }
@@ -125,12 +130,9 @@ kotlin {
 
 // PipePipe brings com.google.protobuf:protobuf-java (full) while Brave brings
 // com.google.protobuf:protobuf-javalite. Both occupy the com.google.protobuf.* namespace and
-// trigger DEX duplicate-class failures. Drop the full variant globally so Brave's javalite wins.
+// trigger DEX duplicate-class failures. Exclude it only from PipePipe above:
+// lint's own sdk-common runtime requires the full protobuf implementation.
 // nanojson force is in the root build.gradle.kts so it propagates to the final APK classpath.
-configurations.all {
-    exclude(group = "com.google.protobuf", module = "protobuf-java")
-}
-
 tasks.withType<CompileArtProfileTask> {
     enabled = false
 }

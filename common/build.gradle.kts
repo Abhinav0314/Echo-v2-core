@@ -15,6 +15,7 @@ kotlin {
         namespace = "com.maxrave.common"
         compileSdk = 37
         minSdk = 26
+        withHostTest {}
     }
 
     // For iOS targets, this is also where you should

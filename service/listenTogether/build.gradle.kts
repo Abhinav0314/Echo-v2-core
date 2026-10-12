@@ -12,6 +12,7 @@ kotlin {
         namespace = "org.simpmusic.listentogether"
         compileSdk = 37
         minSdk = 26
+        withHostTest {}
     }
 
     val xcfName = "listenTogetherKit"

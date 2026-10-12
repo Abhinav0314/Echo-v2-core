@@ -1,6 +1,5 @@
 package com.maxrave.kotlinytmusicscraper.pages
 
-import com.maxrave.kotlinytmusicscraper.models.Album
 import com.maxrave.kotlinytmusicscraper.models.AlbumItem
 import com.maxrave.kotlinytmusicscraper.models.Artist
 import com.maxrave.kotlinytmusicscraper.models.ArtistItem
@@ -10,8 +9,8 @@ import com.maxrave.kotlinytmusicscraper.models.SongItem
 import com.maxrave.kotlinytmusicscraper.models.Thumbnails
 import com.maxrave.kotlinytmusicscraper.models.YTItem
 import com.maxrave.kotlinytmusicscraper.models.oddElements
+import com.maxrave.kotlinytmusicscraper.models.songByline
 import com.maxrave.kotlinytmusicscraper.models.splitBySeparator
-import com.maxrave.kotlinytmusicscraper.utils.parseTime
 
 data class SearchResult(
     val items: List<YTItem>,
@@ -74,9 +73,10 @@ object SearchPage {
                     ?.text
                     ?.runs
                     ?.splitBySeparator()
-                    ?: return null
+                    .orEmpty()
             return when {
                 renderer.isSong -> {
+                    val metadata = renderer.songByline()
                     SongItem(
                         id = renderer.videoId ?: return null,
                         title =
@@ -87,30 +87,9 @@ object SearchPage {
                                 ?.runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
-                        artists =
-                            secondaryLine.firstOrNull()?.oddElements()?.map {
-                                Artist(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId,
-                                )
-                            } ?: return null,
-                        album =
-                            secondaryLine
-                                .getOrNull(1)
-                                ?.firstOrNull()
-                                ?.takeIf { it.navigationEndpoint?.browseEndpoint != null }
-                                ?.let {
-                                    Album(
-                                        name = it.text,
-                                        id = it.navigationEndpoint?.browseEndpoint?.browseId!!,
-                                    )
-                                },
-                        duration =
-                            secondaryLine
-                                .lastOrNull()
-                                ?.firstOrNull()
-                                ?.text
-                                ?.parseTime(),
+                        artists = metadata.artists,
+                        album = metadata.album,
+                        duration = metadata.duration,
                         thumbnail =
                             renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl()
                                 ?: return null,

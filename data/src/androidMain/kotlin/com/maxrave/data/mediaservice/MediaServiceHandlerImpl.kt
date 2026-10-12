@@ -262,6 +262,8 @@ internal class MediaServiceHandlerImpl(
     private var toggleLikeJob: Job? = null
 
     private var loadJob: Job? = null
+    private var relatedJob: Job? = null
+    private val playbackRequestGeneration = AtomicLong(0L)
     private val restoreQueueMutex = Mutex()
 
     // Set by restoreQueueAndPlay before it contends for restoreQueueMutex, so a startup
@@ -1314,7 +1316,8 @@ internal class MediaServiceHandlerImpl(
     ) {
         player.clearMediaItems()
         player.setMediaItem(mediaItem)
-        player.prepare()
+        // The updated crossfade adapter prepares when setting an item. Preparing again
+        // schedules a second native load and defeats latest-request ownership.
         player.playWhenReady = playWhenReady
     }
 
@@ -1331,7 +1334,6 @@ internal class MediaServiceHandlerImpl(
     override fun playMediaItemInMediaSource(index: Int) {
         val i = if (player.shuffleModeEnabled) player.getUnshuffledIndex(index) else index
         player.seekTo(i, 0)
-        player.prepare()
         player.playWhenReady = true
     }
 
@@ -1678,8 +1680,12 @@ internal class MediaServiceHandlerImpl(
 
     override fun getRelated(videoId: String) {
         if (queueData.value.queueState == QueueData.StateSource.STATE_INITIALIZING) return
-        coroutineScope.launch {
+        relatedJob?.cancel()
+        val requestedQueue = queueData.value.data
+        relatedJob = coroutineScope.launch {
             songRepository.getRelatedData(videoId).collect { response ->
+                if (queueData.value.data !== requestedQueue &&
+                    queueData.value.data.firstPlayedTrack?.videoId != requestedQueue.firstPlayedTrack?.videoId) return@collect
                 when (response) {
                     is Resource.Success -> {
                         loadMoreCatalog(response.data?.first?.toCollection(arrayListOf()) ?: arrayListOf())
@@ -2303,6 +2309,7 @@ internal class MediaServiceHandlerImpl(
         type: String,
         index: Int?,
     ) {
+        val request = playbackRequestGeneration.incrementAndGet()
         val track =
             when (anyTrack) {
                 is Track -> anyTrack
@@ -2316,10 +2323,14 @@ internal class MediaServiceHandlerImpl(
         songRepository.insertSong(track.toSongEntity()).singleOrNull()?.let {
             Logger.d(TAG, "Inserted song: ${track.title}")
         }
+        songRepository.refreshTrackMetadata(track)
+        if (playbackRequestGeneration.get() != request) return
+        relatedJob?.cancel()
         clearMediaItems()
         track.durationSeconds?.let {
             songRepository.updateDurationSeconds(it, track.videoId)
         }
+        if (playbackRequestGeneration.get() != request) return
         addMediaItem(track.toGenericMediaItem(), playWhenReady = type != RECOVER_TRACK_QUEUE)
         when (type) {
             SONG_CLICK, VIDEO_CLICK, SHARE -> {

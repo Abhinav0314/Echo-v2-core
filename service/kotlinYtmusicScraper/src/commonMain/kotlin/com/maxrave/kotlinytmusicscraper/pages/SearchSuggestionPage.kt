@@ -1,6 +1,5 @@
 package com.maxrave.kotlinytmusicscraper.pages
 
-import com.maxrave.kotlinytmusicscraper.models.Album
 import com.maxrave.kotlinytmusicscraper.models.AlbumItem
 import com.maxrave.kotlinytmusicscraper.models.Artist
 import com.maxrave.kotlinytmusicscraper.models.ArtistItem
@@ -9,12 +8,14 @@ import com.maxrave.kotlinytmusicscraper.models.SongItem
 import com.maxrave.kotlinytmusicscraper.models.VideoItem
 import com.maxrave.kotlinytmusicscraper.models.YTItem
 import com.maxrave.kotlinytmusicscraper.models.oddElements
+import com.maxrave.kotlinytmusicscraper.models.songByline
 import com.maxrave.kotlinytmusicscraper.models.splitBySeparator
 
 object SearchSuggestionPage {
     fun fromMusicResponsiveListItemRenderer(renderer: MusicResponsiveListItemRenderer): YTItem? {
         return when {
             renderer.isVideo -> {
+                val metadata = renderer.songByline()
                 VideoItem(
                     id = renderer.videoId ?: return null,
                     title =
@@ -31,34 +32,15 @@ object SearchSuggestionPage {
                         renderer.badges?.find {
                             it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
                         } != null,
-                    artists =
-                        renderer.flexColumns
-                            .getOrNull(1)
-                            ?.musicResponsiveListItemFlexColumnRenderer
-                            ?.text
-                            ?.runs
-                            ?.splitBySeparator()
-                            ?.getOrNull(1)
-                            ?.oddElements()
-                            ?.map {
-                                Artist(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId,
-                                )
-                            } ?: return null,
-                    album =
-                        renderer.flexColumns.getOrNull(2)?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.let {
-                            Album(
-                                name = it.text,
-                                id = it.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
-                            )
-                        },
-                    duration = null,
+                    artists = metadata.artists,
+                    album = metadata.album,
+                    duration = metadata.duration,
                     view = null,
                     musicVideoType = renderer.musicVideoType,
                 )
             }
             renderer.isSong -> {
+                val metadata = renderer.songByline()
                 SongItem(
                     id = renderer.videoId ?: return null,
                     title =
@@ -69,29 +51,9 @@ object SearchSuggestionPage {
                             ?.runs
                             ?.firstOrNull()
                             ?.text ?: return null,
-                    artists =
-                        renderer.flexColumns
-                            .getOrNull(1)
-                            ?.musicResponsiveListItemFlexColumnRenderer
-                            ?.text
-                            ?.runs
-                            ?.splitBySeparator()
-                            ?.getOrNull(1)
-                            ?.oddElements()
-                            ?.map {
-                                Artist(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId,
-                                )
-                            } ?: return null,
-                    album =
-                        renderer.flexColumns.getOrNull(2)?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.let {
-                            Album(
-                                name = it.text,
-                                id = it.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
-                            )
-                        },
-                    duration = null,
+                    artists = metadata.artists,
+                    album = metadata.album,
+                    duration = metadata.duration,
                     thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                     thumbnails = renderer.thumbnail.musicThumbnailRenderer.thumbnail,
                     explicit =
