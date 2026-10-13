@@ -27,5 +27,5 @@ fun loadAllModules(appIdentity: AppIdentity) {
 
 expect fun loadMediaService()
 
-/** Login sync is one-sided per platform: Desktop hosts, Android sends, iOS takes no part. */
+/** Upstream desktop login transfer seam; Echo Android and iOS take no part. */
 expect fun loadLoginSyncModule()

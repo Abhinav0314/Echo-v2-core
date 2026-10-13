@@ -11,8 +11,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.Player.COMMAND_GET_TIMELINE
-import androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT
-import androidx.media3.common.Player.COMMAND_SEEK_TO_PREVIOUS
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
@@ -98,7 +96,7 @@ internal class SimpleMediaSessionCallback(
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.GET_PLATFORM_TOKEN, Bundle()))
                 .build()
         return MediaSession.ConnectionResult
-            .AcceptedResultBuilder(session)
+            .AcceptedResultBuilder(session, controller)
             .setAvailableSessionCommands(sessionCommands)
             .setAvailablePlayerCommands(
                 Player.Commands
@@ -109,26 +107,9 @@ internal class SimpleMediaSessionCallback(
             ).build()
     }
 
-    override fun onPlayerCommandRequest(
-        session: MediaSession,
-        controller: MediaSession.ControllerInfo,
-        playerCommand: Int,
-    ): Int {
-        Logger.w(TAG, "Player Command $playerCommand")
-        scope.launch {
-            when (playerCommand) {
-                COMMAND_SEEK_TO_NEXT -> {
-                    mediaPlayerHandler.onPlayerEvent(PlayerEvent.Next)
-                }
-                COMMAND_SEEK_TO_PREVIOUS -> {
-                    mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous)
-                }
-                COMMAND_GET_TIMELINE -> {
-                }
-            }
-        }
-        return super.onPlayerCommandRequest(session, controller, playerCommand)
-    }
+    // MediaSession dispatches transport commands directly to its Player. The forwarding
+    // player already routes these through the crossfade adapter (or the Cast player).
+    // Dispatching another handler event here would perform each skip twice.
 
     @UnstableApi
     override fun onCustomCommand(

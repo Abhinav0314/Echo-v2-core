@@ -5,10 +5,6 @@ plugins {
 
 kotlin {
     jvmToolchain(21)
-    compilerOptions {
-        freeCompilerArgs.add("-Xmulti-dollar-interpolation")
-        freeCompilerArgs.add("-Xwhen-guards")
-    }
 }
 
 android {

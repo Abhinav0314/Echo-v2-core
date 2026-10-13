@@ -153,8 +153,7 @@ class CrossfadeFilterAudioProcessor : BaseAudioProcessor() {
         }
     }
 
-    override fun onFlush() {
-        super.onFlush()
+    override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
         filter.reset()
     }
 

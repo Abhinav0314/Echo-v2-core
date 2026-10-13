@@ -30,14 +30,14 @@ data class MusicTwoRowItemRenderer(
 
     val isSong: Boolean
         get() =
-            navigationEndpoint?.endpoint is WatchEndpoint &&
+            navigationEndpoint.endpoint is WatchEndpoint &&
                 (
                     if (aspectRatio != null) {
                         aspectRatio != "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_RECTANGLE_16_9"
                     } else {
                         val thumbnail =
                             thumbnailRenderer
-                                ?.musicThumbnailRenderer
+                                .musicThumbnailRenderer
                                 ?.thumbnail
                                 ?.thumbnails
                                 ?.firstOrNull()
@@ -47,7 +47,7 @@ data class MusicTwoRowItemRenderer(
     val isPlaylist: Boolean
         get() =
             navigationEndpoint
-                ?.browseEndpoint
+                .browseEndpoint
                 ?.browseEndpointContextSupportedConfigs
                 ?.browseEndpointContextMusicConfig
                 ?.pageType ==
@@ -56,13 +56,13 @@ data class MusicTwoRowItemRenderer(
     val isAlbum: Boolean
         get() =
             navigationEndpoint
-                ?.browseEndpoint
+                .browseEndpoint
                 ?.browseEndpointContextSupportedConfigs
                 ?.browseEndpointContextMusicConfig
                 ?.pageType ==
                 MUSIC_PAGE_TYPE_ALBUM ||
                 navigationEndpoint
-                    ?.browseEndpoint
+                    .browseEndpoint
                     ?.browseEndpointContextSupportedConfigs
                     ?.browseEndpointContextMusicConfig
                     ?.pageType ==
@@ -70,7 +70,7 @@ data class MusicTwoRowItemRenderer(
     val isArtist: Boolean
         get() =
             navigationEndpoint
-                ?.browseEndpoint
+                .browseEndpoint
                 ?.browseEndpointContextSupportedConfigs
                 ?.browseEndpointContextMusicConfig
                 ?.pageType ==
@@ -80,7 +80,7 @@ data class MusicTwoRowItemRenderer(
     val isUserChannel: Boolean
         get() =
             navigationEndpoint
-                ?.browseEndpoint
+                .browseEndpoint
                 ?.browseEndpointContextSupportedConfigs
                 ?.browseEndpointContextMusicConfig
                 ?.pageType ==
@@ -90,21 +90,21 @@ data class MusicTwoRowItemRenderer(
     val isPodcast: Boolean
         get() =
             navigationEndpoint
-                ?.browseEndpoint
+                .browseEndpoint
                 ?.browseEndpointContextSupportedConfigs
                 ?.browseEndpointContextMusicConfig
                 ?.pageType ==
                 MUSIC_PAGE_TYPE_PODCAST_SHOW_DETAIL_PAGE
     val isVideo: Boolean
         get() =
-            navigationEndpoint?.endpoint is WatchEndpoint &&
+            navigationEndpoint.endpoint is WatchEndpoint &&
                 (
                     if (aspectRatio != null) {
                         aspectRatio == "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_RECTANGLE_16_9"
                     } else {
                         val thumbnail =
                             thumbnailRenderer
-                                ?.musicThumbnailRenderer
+                                .musicThumbnailRenderer
                                 ?.thumbnail
                                 ?.thumbnails
                                 ?.firstOrNull()
@@ -120,7 +120,7 @@ data class MusicTwoRowItemRenderer(
     val musicVideoType: String?
         get() =
             navigationEndpoint
-                ?.watchEndpoint
+                .watchEndpoint
                 ?.watchEndpointMusicSupportedConfigs
                 ?.watchEndpointMusicConfig
                 ?.musicVideoType

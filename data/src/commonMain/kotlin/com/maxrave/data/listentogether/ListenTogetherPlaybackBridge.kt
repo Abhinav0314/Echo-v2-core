@@ -1,23 +1,22 @@
 package com.maxrave.data.listentogether
 
 import com.maxrave.common.MERGING_DATA_TYPE
-import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.listentogether.RoomTrack
 import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.domain.data.player.GenericMediaMetadata
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
-import com.maxrave.domain.mediaservice.handler.QueueData
 import com.maxrave.domain.mediaservice.handler.SimpleMediaState
 import com.maxrave.domain.repository.ListenTogetherRepository
 import com.maxrave.logger.Logger
 import kotlin.math.abs
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,6 +33,7 @@ private const val TAG = "ListenTogetherBridge"
 
 /** What the guest reacts to. A data class so `distinctUntilChanged` compares every field. */
 private data class RoomSnapshot(
+    val roomCode: String?,
     val track: RoomTrack?,
     val isPlaying: Boolean,
     val position: Long,
@@ -74,6 +74,7 @@ class ListenTogetherPlaybackBridge(
     private var lastPublishedTrackId: String? = null
     private var lastAppliedTrackId: String? = null
     private var lastAppliedQueueIds: List<String> = emptyList()
+    private var lastAppliedRoomCode: String? = null
 
     /**
      * Whether the room was playing before the command currently being applied.
@@ -158,6 +159,7 @@ class ListenTogetherPlaybackBridge(
             // compares equal here and is dropped, so the guest never builds the host's queue at all.
             .map {
                 RoomSnapshot(
+                    roomCode = it.roomCode,
                     track = it.currentTrack,
                     isPlaying = it.isPlaying,
                     position = it.position,
@@ -165,9 +167,20 @@ class ListenTogetherPlaybackBridge(
                 ) to (it.inRoom && !it.isHost)
             }
             .distinctUntilChanged()
-            .collect { (snapshot, shouldFollow) ->
-                if (!shouldFollow) return@collect
-                val (track, isPlaying, position, queueIds) = snapshot
+            .collectLatest { (snapshot, shouldFollow) ->
+                if (!shouldFollow || snapshot.roomCode != lastAppliedRoomCode) {
+                    // A room identity is part of playback ownership. Rejoining the same track
+                    // must rebuild it even if the previous room had an identical queue.
+                    lastAppliedRoomCode = if (shouldFollow) snapshot.roomCode else null
+                    lastAppliedTrackId = null
+                    lastAppliedQueueIds = emptyList()
+                    lastRoomPlaying = false
+                }
+                if (!shouldFollow) return@collectLatest
+                val track = snapshot.track
+                val isPlaying = snapshot.isPlaying
+                val position = snapshot.position
+                val queueIds = snapshot.queueIds
                 Logger.i(TAG, "Room says: track=${track?.id} playing=$isPlaying pos=$position queue=${queueIds.size}")
                 applyingRemote = true
                 try {
@@ -183,10 +196,8 @@ class ListenTogetherPlaybackBridge(
                     // with the track unchanged, and is applied normally.
                     val playing = if (trackChanged && !isPlaying) lastRoomPlaying else isPlaying
                     lastRoomPlaying = playing
-                    if (trackChanged && track != null) {
+                    if (trackChanged) {
                         val sameTrack = track.id == lastAppliedTrackId
-                        lastAppliedTrackId = track.id
-                        lastAppliedQueueIds = queueIds
                         // Decided BEFORE loading, not corrected afterwards: loading with a hardcoded
                         // playWhenReady=true and letting applyTransport pause it is a race, and the
                         // guest wins it by starting to play in a room the host has paused.
@@ -203,8 +214,14 @@ class ListenTogetherPlaybackBridge(
                                 else -> session.positionAt(position, playing)
                             }
                         playTrack(track, keepPosition = startAt, playWhenReady = playing)
+                        // A cancelled/failed load is not an applied track; allow the next state
+                        // to retry it rather than silently treating a partial queue as complete.
+                        lastAppliedTrackId = track.id
+                        lastAppliedQueueIds = queueIds
                     }
                     applyTransport(playing, position)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Logger.e(TAG, "Failed to apply remote state: ${e.message}")
                 } finally {
@@ -265,15 +282,15 @@ class ListenTogetherPlaybackBridge(
     ) {
         val roomQueue = repository.room.value.queue
         // Metrolist's canonicalPlaybackQueue: the current track leads, upcoming follows, no dupes.
-        val ordered =
-            (listOf(info) + roomQueue.filter { it.id != info.id })
-                .filter { it.id.isNotBlank() }
-                .distinctBy { it.id }
+        val ordered = roomPlaybackOrder(info, roomQueue)
         Logger.i(TAG, "Guest loading ${info.id} (${info.title}) + ${ordered.size - 1} upcoming")
 
         // Dispatchers.Main is mandatory, not tidiness: Media3 throws if the player is touched off
         // the main thread, and the bridge runs on the service scope (Default).
         withContext(Dispatchers.Main) {
+            // Keep the handler/UI queue in step with the player and discard the previous local
+            // catalog's continuation before transition callbacks can try to load more of it.
+            handler.setQueueData(ordered.toGuestQueueData(session.state.value.queueTitle))
             handler.clearMediaItems()
             handler.addMediaItem(ordered.first().toRoomMediaItem(), playWhenReady = playWhenReady)
             val rest = ordered.drop(1)
@@ -341,35 +358,33 @@ class ListenTogetherPlaybackBridge(
     /** Republishes the queue whenever the host's own queue changes. */
     private suspend fun publishQueueAsHost() {
         handler.queueData
-            .map { (it as? QueueData.Data)?.listTracks?.map { t -> t.videoId }.orEmpty() }
+            .map { it.toRoomPlaybackQueue() }
             .distinctUntilChanged()
-            .collect { ids ->
+            .collect { queue ->
                 val state = repository.room.value
-                if (!state.inRoom || !state.isHost || applyingRemote || ids.isEmpty()) return@collect
-                publishQueue()
+                if (!state.inRoom || !state.isHost || applyingRemote) return@collect
+                // Empty is a real queue update too: otherwise guests keep removed upcoming songs.
+                publishQueue(queue)
             }
     }
 
-    private fun publishQueue() {
-        val data = handler.queueData.value as? QueueData.Data ?: return
-        val tracks = data.listTracks.map { it.toTrackInfo() }
-        if (tracks.isEmpty()) return
-        session.sendQueue(tracks, data.playlistName.orEmpty())
-        Logger.i(TAG, "Published queue of ${tracks.size} track(s)")
+    private fun publishQueue(queue: RoomPlaybackQueue) {
+        session.sendQueue(queue.tracks, queue.title)
+        Logger.i(TAG, "Published queue of ${queue.tracks.size} track(s)")
     }
 
     private fun publishSnapshot() {
         val item = handler.nowPlaying.value ?: return
         if (item.mediaId.isBlank()) return
         lastPublishedTrackId = item.mediaId
-        val data = handler.queueData.value as? QueueData.Data
+        val queue = handler.queueData.value.toRoomPlaybackQueue()
         session.sendPlaybackAction(
             action = PlaybackActions.CHANGE_TRACK,
             trackId = item.mediaId,
             position = handler.player.currentPosition,
             trackInfo = item.toTrackInfo(),
-            queue = data?.listTracks.orEmpty().map { it.toTrackInfo() },
-            queueTitle = data?.playlistName.orEmpty(),
+            queue = queue.tracks,
+            queueTitle = queue.title,
         )
         // A second command, because change_track alone does not say whether it is running —
         // the server explicitly sets IsPlaying=false on a track change.
@@ -386,20 +401,20 @@ class ListenTogetherPlaybackBridge(
         handler.nowPlaying
             .filterNotNull()
             .distinctUntilChanged { old, new -> old.mediaId == new.mediaId }
-            .collect { item ->
+            .collectLatest { item ->
                 val state = repository.room.value
-                if (!state.inRoom || !state.isHost || applyingRemote) return@collect
-                if (item.mediaId == lastPublishedTrackId) return@collect
+                if (!state.inRoom || !state.isHost || applyingRemote) return@collectLatest
+                if (item.mediaId == lastPublishedTrackId) return@collectLatest
                 lastPublishedTrackId = item.mediaId
                 Logger.i(TAG, "Host publishing track change: ${item.mediaId}")
-                val data = handler.queueData.value as? QueueData.Data
+                val queue = handler.queueData.value.toRoomPlaybackQueue()
                 session.sendPlaybackAction(
                     action = PlaybackActions.CHANGE_TRACK,
                     trackId = item.mediaId,
                     position = 0L,
                     trackInfo = item.toTrackInfo(),
-                    queue = data?.listTracks.orEmpty().map { it.toTrackInfo() },
-                    queueTitle = data?.playlistName.orEmpty(),
+                    queue = queue.tracks,
+                    queueTitle = queue.title,
                 )
                 // change_track alone leaves the room paused: the server sets IsPlaying=false on
                 // every track change. The host's own controlState does NOT change when one playing
@@ -423,7 +438,10 @@ class ListenTogetherPlaybackBridge(
                             delay(PLAY_SETTLE_POLL_MS)
                         }
                     } != null
-                if (started) {
+                // The settle wait may outlive a leave/host transfer. Never publish its PLAY
+                // into a different room or after another track has taken ownership.
+                val currentRoom = repository.room.value
+                if (started && mayPublishSettledPlayback(state, currentRoom, item.mediaId, handler.nowPlaying.value?.mediaId)) {
                     session.sendPlaybackAction(
                         action = PlaybackActions.PLAY,
                         trackId = "",
@@ -531,16 +549,6 @@ class ListenTogetherPlaybackBridge(
             album = album,
             duration = durationMs,
             thumbnail = thumbnail,
-        )
-
-    private fun Track.toTrackInfo(): TrackInfo =
-        TrackInfo(
-            id = videoId,
-            title = title,
-            artist = artists?.joinToString(", ") { it.name }.orEmpty(),
-            album = album?.name.orEmpty(),
-            duration = (durationSeconds?.toLong() ?: 0L) * 1000L,
-            thumbnail = thumbnails?.lastOrNull()?.url.orEmpty(),
         )
 
     /** The room carries a videoId plus display metadata; the guest resolves its own stream. */

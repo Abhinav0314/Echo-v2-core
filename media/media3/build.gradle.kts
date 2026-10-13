@@ -11,13 +11,11 @@ plugins {
 
 kotlin {
     jvmToolchain(21)
-    compilerOptions {
-        freeCompilerArgs.add("-Xmulti-dollar-interpolation")
-        freeCompilerArgs.add("-Xwhen-guards")
-    }
 }
 
 android {
+    // Run the same host tests against the variant shipped to Android users.
+    testBuildType = "release"
     namespace = "com.maxrave.media3"
     compileSdk = 37
 
@@ -41,6 +39,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -48,6 +49,7 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.appcompat)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.espresso.core)
 

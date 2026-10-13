@@ -3,6 +3,7 @@ package com.maxrave.media3.service.backup
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteOpenHelper
+import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.datasource.cache.SimpleCache

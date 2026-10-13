@@ -331,8 +331,8 @@ internal class CommonRepositoryImpl(
 
     private fun collectionPreview(
         count: Flow<Int>,
-        thumbnails: Flow<List<String?>>,
-    ): Flow<LibraryCollectionPreview> = combine(count, thumbnails) { n, urls -> LibraryCollectionPreview(n, urls.filterNotNull()) }
+        thumbnails: Flow<List<String>>,
+    ): Flow<LibraryCollectionPreview> = combine(count, thumbnails) { n, urls -> LibraryCollectionPreview(n, urls) }
 
     // Notifications
     override suspend fun insertNotification(notificationEntity: NotificationEntity) =

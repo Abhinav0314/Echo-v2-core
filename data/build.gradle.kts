@@ -21,10 +21,6 @@ plugins {
 
 kotlin {
     jvmToolchain(21)
-    compilerOptions {
-        freeCompilerArgs.add("-Xmulti-dollar-interpolation")
-        freeCompilerArgs.add("-Xwhen-guards")
-    }
     // Target declarations - add or remove as needed below. These define
     // which platforms this KMP module supports.
     // See: https://kotlinlang.org/docs/multiplatform-discover-project.html#targets
@@ -122,8 +118,6 @@ kotlin {
                 implementation(projects.echo.librarySync)
                 implementation(projects.media3)
                 implementation(libs.room.ktx)
-                // Login sync: the phone sends sign-ins to the Desktop
-                implementation(projects.loginSync)
             }
         }
 

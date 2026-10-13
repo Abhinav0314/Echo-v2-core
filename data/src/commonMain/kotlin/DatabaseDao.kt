@@ -429,19 +429,19 @@ interface DatabaseDao {
     fun countLikedSongs(): Flow<Int>
 
     @Query("SELECT thumbnails FROM song WHERE liked = 1 AND thumbnails IS NOT NULL ORDER BY favoriteAt DESC LIMIT :limit")
-    fun getLikedSongThumbnails(limit: Int): Flow<List<String?>>
+    fun getLikedSongThumbnails(limit: Int): Flow<List<String>>
 
     @Query("SELECT COUNT(*) FROM song WHERE downloadState = 3")
     fun countDownloadedSongs(): Flow<Int>
 
     @Query("SELECT thumbnails FROM song WHERE downloadState = 3 AND thumbnails IS NOT NULL ORDER BY downloadedAt DESC LIMIT :limit")
-    fun getDownloadedSongThumbnails(limit: Int): Flow<List<String?>>
+    fun getDownloadedSongThumbnails(limit: Int): Flow<List<String>>
 
     @Query("SELECT COUNT(*) FROM artist WHERE followed = 1")
     fun countFollowedArtists(): Flow<Int>
 
     @Query("SELECT thumbnails FROM artist WHERE followed = 1 AND thumbnails IS NOT NULL ORDER BY followedAt DESC LIMIT :limit")
-    fun getFollowedArtistThumbnails(limit: Int): Flow<List<String?>>
+    fun getFollowedArtistThumbnails(limit: Int): Flow<List<String>>
 
     @Query("UPDATE song SET downloadState = :downloadState, downloadedAt = :downloadedAt WHERE videoId = :videoId")
     suspend fun updateDownloadState(

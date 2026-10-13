@@ -47,7 +47,7 @@ class EchoAudioProcessor(
     // Whether a delay is configured is a separate matter entirely, and is decided per buffer by the
     // bypass branch below, because activity is only reconsidered on configure.
 
-    override fun onFlush() {
+    override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
         // A seek or a track change: the recorded audio is from somewhere else in the timeline and
         // must not echo into what comes next.
         kernel.flush()

@@ -80,10 +80,10 @@ data class RelatedPage(
             return when {
                 renderer.isSong ->
                     SongItem(
-                        id = renderer.navigationEndpoint?.watchEndpoint?.videoId ?: return null,
+                        id = renderer.navigationEndpoint.watchEndpoint?.videoId ?: return null,
                         title =
                             renderer.title
-                                ?.runs
+                                .runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
                         artists =
@@ -103,17 +103,17 @@ data class RelatedPage(
                                 } ?: return null,
                         album = null,
                         duration = null,
-                        thumbnail = renderer.thumbnailRenderer?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
+                        thumbnail = renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                         endpoint = renderer.navigationEndpoint.watchEndpoint,
                         musicVideoType = renderer.musicVideoType,
                     )
 
                 renderer.isVideo ->
                     VideoItem(
-                        id = renderer.navigationEndpoint?.watchEndpoint?.videoId ?: return null,
+                        id = renderer.navigationEndpoint.watchEndpoint?.videoId ?: return null,
                         title =
                             renderer.title
-                                ?.runs
+                                .runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
                         artists =
@@ -125,7 +125,7 @@ data class RelatedPage(
                             } ?: return null,
                         album = null,
                         duration = null,
-                        thumbnail = renderer.thumbnailRenderer?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
+                        thumbnail = renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                         endpoint = renderer.navigationEndpoint.watchEndpoint,
                         musicVideoType = renderer.musicVideoType,
                     )
@@ -133,7 +133,7 @@ data class RelatedPage(
                 renderer.isAlbum ->
                     AlbumItem(
                         browseId =
-                            renderer.navigationEndpoint?.browseEndpoint?.browseId
+                            renderer.navigationEndpoint.browseEndpoint?.browseId
                                 ?: return null,
                         playlistId =
                             renderer.thumbnailOverlay
@@ -154,7 +154,7 @@ data class RelatedPage(
                                     .removePrefix("VL"),
                         title =
                             renderer.title
-                                ?.runs
+                                .runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
                         artists =
@@ -172,7 +172,7 @@ data class RelatedPage(
                                 ?.text
                                 ?.toIntOrNull(),
                         thumbnail =
-                            renderer.thumbnailRenderer?.musicThumbnailRenderer?.getThumbnailUrl()
+                            renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl()
                                 ?: return null,
                         explicit =
                             renderer.subtitleBadges?.find {
@@ -184,13 +184,13 @@ data class RelatedPage(
                     PlaylistItem(
                         id =
                             renderer.navigationEndpoint
-                                ?.browseEndpoint
+                                .browseEndpoint
                                 ?.browseId
                                 ?.removePrefix("VL")
                                 ?: return null,
                         title =
                             renderer.title
-                                ?.runs
+                                .runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
                         author =
@@ -206,7 +206,7 @@ data class RelatedPage(
                                 ?.getOrNull(4)
                                 ?.text,
                         thumbnail =
-                            renderer.thumbnailRenderer?.musicThumbnailRenderer?.getThumbnailUrl()
+                            renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl()
                                 ?: return null,
                         playEndpoint =
                             renderer.thumbnailOverlay

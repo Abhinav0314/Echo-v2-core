@@ -103,7 +103,7 @@ class ConvolutionReverbAudioProcessor(
     // that is what the bypass path below is for, and it has to stay reachable so switching the
     // effect on mid-track takes effect without reconfiguring the sink.
 
-    override fun onFlush() {
+    override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
         // The impulse survives a seek; the history must not. Whatever is in the convolvers is the
         // tail of audio the user has just skipped away from, and letting it ring over the new
         // position would sound like the old song bleeding into the new one.

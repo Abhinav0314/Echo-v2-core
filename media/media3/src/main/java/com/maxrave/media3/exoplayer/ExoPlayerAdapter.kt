@@ -1,6 +1,6 @@
 package com.maxrave.media3.exoplayer
 
-import android.annotation.SuppressLint
+import androidx.annotation.OptIn
 import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -28,7 +28,6 @@ import com.maxrave.media3.utils.BetterShuffleOrder
  */
 private const val TAG = "ExoPlayerAdapter"
 
-@SuppressLint("UnsafeOptInUsageError")
 @OptIn(UnstableApi::class)
 class ExoPlayerAdapter(
     private val exoPlayer: ExoPlayer,

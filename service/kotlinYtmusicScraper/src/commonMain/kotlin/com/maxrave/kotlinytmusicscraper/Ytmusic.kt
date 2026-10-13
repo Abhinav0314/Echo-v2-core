@@ -25,8 +25,8 @@ import com.maxrave.kotlinytmusicscraper.models.body.PlayerBody
 import com.maxrave.kotlinytmusicscraper.models.body.SearchBody
 import com.maxrave.kotlinytmusicscraper.models.response.DownloadProgress
 import com.maxrave.kotlinytmusicscraper.models.response.RemoteConfig
+import com.maxrave.kotlinytmusicscraper.utils.buildYouTubeAuthorizationHeader
 import com.maxrave.kotlinytmusicscraper.utils.parseCookieString
-import com.maxrave.kotlinytmusicscraper.utils.sha1
 import com.maxrave.ktorext.curl.CurlLogger
 import com.maxrave.ktorext.encoding.brotli
 import com.maxrave.ktorext.getEngine
@@ -65,7 +65,7 @@ import io.ktor.http.userAgent
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.serialization.kotlinx.protobuf.protobuf
 import io.ktor.serialization.kotlinx.xml.xml
-import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -246,14 +246,15 @@ class Ytmusic {
             }
             if (setLogin) {
                 val cookie = customCookie ?: this@Ytmusic.cookie
-                cookie?.let { cookie ->
+                cookie?.let {
                     append("Cookie", cookie)
-                    if ("SAPISID" !in cookieMap || "__Secure-3PAPISID" !in cookieMap) return@let
-                    val currentTime = now().toInstant(TimeZone.currentSystemDefault()).epochSeconds / 1000
-                    val sapisidCookie = cookieMap["SAPISID"] ?: cookieMap["__Secure-3PAPISID"]
-                    val sapisidHash = sha1("$currentTime $sapisidCookie https://music.youtube.com")
-                    Logger.d(TAG, "SAPI SID Hash: SAPISIDHASH ${currentTime}_$sapisidHash")
-                    append("Authorization", "SAPISIDHASH ${currentTime}_$sapisidHash")
+                    val currentTime = now().toInstant(TimeZone.currentSystemDefault()).epochSeconds
+                    val authorization =
+                        buildYouTubeAuthorizationHeader(
+                            if (customCookie != null) parseCookieString(customCookie) else cookieMap,
+                            currentTime,
+                        ) ?: return@let
+                    append("Authorization", authorization)
                 }
             }
         }
@@ -263,13 +264,9 @@ class Ytmusic {
 
     @OptIn(ExperimentalTime::class)
     internal fun getAuthorizationHeader(): String? =
-        cookie?.let { cookie ->
-            if ("SAPISID" !in cookieMap || "__Secure-3PAPISID" !in cookieMap) null
-            val currentTime = now().toInstant(TimeZone.currentSystemDefault()).epochSeconds / 1000
-            val sapisidCookie = cookieMap["SAPISID"] ?: cookieMap["__Secure-3PAPISID"]
-            val sapisidHash = sha1("$currentTime $sapisidCookie https://music.youtube.com")
-            Logger.d(TAG, "SAPI SID Hash: SAPISIDHASH ${currentTime}_$sapisidHash")
-            "SAPISIDHASH ${currentTime}_$sapisidHash"
+        cookie?.let {
+            val currentTime = now().toInstant(TimeZone.currentSystemDefault()).epochSeconds
+            buildYouTubeAuthorizationHeader(cookieMap, currentTime)
         }
 
     fun getNewPipePlayer(videoId: String): List<Pair<Int, String>> = extractor.newPipePlayer(videoId)
@@ -1123,7 +1120,7 @@ class Ytmusic {
                                         val channel = res.bodyAsChannel()
                                         fileSystem.sink(tempFiles[index]).buffer().use { sink ->
                                             while (!channel.isClosedForRead) {
-                                                val packet = channel.readRemaining(downloadBufferSize.toLong())
+                                                val packet = channel.readBuffer(downloadBufferSize.toLong())
                                                 while (!packet.exhausted()) {
                                                     val bytes = packet.readByteArray()
                                                     sink.write(bytes)
@@ -1242,7 +1239,7 @@ class Ytmusic {
                                     val channel = res.bodyAsChannel()
                                     fileSystem.sink(path).buffer().use { sink ->
                                         while (!channel.isClosedForRead) {
-                                            val packet = channel.readRemaining(downloadBufferSize.toLong())
+                                            val packet = channel.readBuffer(downloadBufferSize.toLong())
                                             while (!packet.exhausted()) {
                                                 val bytes = packet.readByteArray()
                                                 sink.write(bytes)

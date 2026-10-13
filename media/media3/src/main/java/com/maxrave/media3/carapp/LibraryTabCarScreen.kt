@@ -274,7 +274,7 @@ internal class LibraryTabCarScreen(
                     ?.toString()
                     ?.takeIf { it.isNotBlank() }
                     ?.let { setText(it) }
-            }.setImage(image, GridItem.IMAGE_TYPE_LARGE)
+            }.setImage(image)
             .setOnClickListener {
                 if (browsable) {
                     screenManager.push(MediaListCarScreen(carContext, browserProvider, item.mediaId, title))

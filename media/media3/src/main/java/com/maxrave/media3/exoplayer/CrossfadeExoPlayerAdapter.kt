@@ -1,10 +1,10 @@
 package com.maxrave.media3.exoplayer
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -81,7 +81,6 @@ private const val TAG = "CrossfadeExoPlayerAdapter"
  *   (instead of manually extracting URLs via StreamRepository)
  * - Each ExoPlayer gets a single [MediaItem] and auto-resolves the stream URL
  */
-@SuppressLint("UnsafeOptInUsageError")
 @OptIn(UnstableApi::class)
 internal class CrossfadeExoPlayerAdapter(
     private val context: Context,
@@ -2361,7 +2360,7 @@ internal class CrossfadeExoPlayerAdapter(
         t: Float,
     ): Float {
         if (start <= 0f || end <= 0f) return end
-        return exp(ln(start) + (ln(end) - ln(start)) * t).toFloat()
+        return exp(ln(start) + (ln(end) - ln(start)) * t)
     }
 
     /**

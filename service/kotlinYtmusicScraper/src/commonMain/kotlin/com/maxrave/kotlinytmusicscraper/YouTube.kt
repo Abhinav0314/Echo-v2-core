@@ -141,6 +141,8 @@ private const val TAG = "YouTubeScraper"
 class YouTube {
     private val ytMusic = Ytmusic()
 
+    private val unknownKeysJson = Json { ignoreUnknownKeys = true }
+
     private val tidalTokenMutex = Mutex()
     private var tidalAccessToken: String? = null
     private var tidalTokenExpiresAt: Long = 0L
@@ -572,44 +574,45 @@ class YouTube {
     suspend fun artist(browseId: String): Result<ArtistPage> =
         runCatching {
             val response = ytMusic.browse(WEB_REMIX, browseId).body<BrowseResponse>()
+            val header = requireNotNull(response.header) { "Missing artist header" }
             ArtistPage(
                 artist =
                     ArtistItem(
                         id = browseId,
                         title =
-                            response.header
-                                ?.musicImmersiveHeaderRenderer
+                            header
+                                .musicImmersiveHeaderRenderer
                                 ?.title
                                 ?.runs
                                 ?.firstOrNull()
                                 ?.text
-                                ?: response.header
-                                    ?.musicVisualHeaderRenderer
+                                ?: header
+                                    .musicVisualHeaderRenderer
                                     ?.title
                                     ?.runs
                                     ?.firstOrNull()
                                     ?.text!!,
                         thumbnail =
-                            response.header
-                                ?.musicImmersiveHeaderRenderer
+                            header
+                                .musicImmersiveHeaderRenderer
                                 ?.thumbnail
                                 ?.musicThumbnailRenderer
                                 ?.getThumbnailUrl()
-                                ?: response.header
-                                    ?.musicVisualHeaderRenderer
+                                ?: header
+                                    .musicVisualHeaderRenderer
                                     ?.foregroundThumbnail
                                     ?.musicThumbnailRenderer
                                     ?.getThumbnailUrl()!!,
                         shuffleEndpoint =
-                            response.header
-                                ?.musicImmersiveHeaderRenderer
+                            header
+                                .musicImmersiveHeaderRenderer
                                 ?.playButton
                                 ?.buttonRenderer
                                 ?.navigationEndpoint
                                 ?.watchEndpoint,
                         radioEndpoint =
-                            response.header
-                                ?.musicImmersiveHeaderRenderer
+                            header
+                                .musicImmersiveHeaderRenderer
                                 ?.startRadioButton
                                 ?.buttonRenderer
                                 ?.navigationEndpoint
@@ -628,14 +631,14 @@ class YouTube {
                 // Every run, not just the first: YouTube splits the text at each link, so the first
                 // run alone stops at "From Wikipedia (".
                 description =
-                    response.header
-                        ?.musicImmersiveHeaderRenderer
+                    header
+                        .musicImmersiveHeaderRenderer
                         ?.description
                         ?.runs
                         ?.let(::getDescription),
                 subscribers =
-                    response.header
-                        ?.musicImmersiveHeaderRenderer
+                    header
+                        .musicImmersiveHeaderRenderer
                         ?.subscriptionButton
                         ?.subscribeButtonRenderer
                         ?.longSubscriberCountText
@@ -1159,8 +1162,7 @@ class YouTube {
                 )
             ksoupHtmlParser.write(ytScrape)
             ksoupHtmlParser.end()
-            val json = Json { ignoreUnknownKeys = true }
-            return@runCatching json.decodeFromString<YouTubeInitialPage>(response)
+            return@runCatching unknownKeysJson.decodeFromString<YouTubeInitialPage>(response)
         }
 
     suspend fun getLikedInfo(videoId: String): Result<LikeStatus> =
@@ -2107,7 +2109,7 @@ class YouTube {
         // never engages and body<T>() fails with "expected ImageUploadResponse but was
         // SourceByteReadChannel" on an otherwise perfectly good 200.
         val blobId =
-            Json { ignoreUnknownKeys = true }
+            unknownKeysJson
                 .decodeFromString<ImageUploadResponse>(
                     ytMusic.uploadPlaylistThumbnail(uploadId, image).bodyAsText(),
                 ).encryptedBlobId

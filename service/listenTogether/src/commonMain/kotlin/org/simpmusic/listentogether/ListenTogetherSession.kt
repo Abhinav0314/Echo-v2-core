@@ -82,6 +82,8 @@ data class ListenTogetherState(
     val pendingJoinCode: String? = null,
     /** Set once and cleared by the UI, so a transient failure cannot wedge the screen. */
     val error: String? = null,
+    /** Title of the explicitly published queue; ordinary transport commands can omit it. */
+    val queueTitle: String = "",
 ) {
     val inRoom: Boolean get() = roomCode != null
     val isConnected: Boolean get() = connection is ConnectionState.Connected
@@ -89,6 +91,25 @@ data class ListenTogetherState(
     /** Names, not ids — "Waiting for Long" is the only useful phrasing of the barrier. */
     val waitingForNames: List<String>
         get() = waitingFor.mapNotNull { id -> members.firstOrNull { it.userId == id }?.username }
+}
+
+/** Applies the protocol's distinction between a queue replacement and omitted transport fields. */
+internal fun ListenTogetherState.applyPlaybackAction(payload: PlaybackActionPayload): ListenTogetherState {
+    val replacesQueue = payload.action == PlaybackActions.SYNC_QUEUE || payload.queue.isNotEmpty()
+    return copy(
+        currentTrack = payload.trackInfo ?: currentTrack,
+        isPlaying = when (payload.action) {
+            PlaybackActions.PAUSE -> false
+            PlaybackActions.PLAY -> true
+            else -> isPlaying
+        },
+        position = if (payload.action == PlaybackActions.SYNC_QUEUE) position else payload.position,
+        // SYNC_QUEUE is an explicit replacement, including an empty list. PLAY/PAUSE/SEEK
+        // default queue=[] means that the sender omitted the queue, so keep the existing one.
+        queue = if (replacesQueue) payload.queue else queue,
+        queueTitle = if (replacesQueue) payload.queueTitle else payload.queueTitle.ifEmpty { queueTitle },
+        lastActionServerTime = payload.capturedAtServerTime,
+    )
 }
 
 /**
@@ -163,6 +184,8 @@ class ListenTogetherSession(
                     joinRequests = emptyList(),
                     suggestions = emptyList(),
                     currentTrack = null,
+                    queue = emptyList(),
+                    queueTitle = "",
                     waitingFor = emptyList(),
                 )
             }
@@ -337,6 +360,8 @@ class ListenTogetherSession(
                         pendingJoinCode = null,
                         members = p.state?.users.orEmpty().map { u -> u.toMember() },
                         queue = p.state?.queue.orEmpty(),
+                        // RoomState has no title field; never reuse another room's queue name.
+                        queueTitle = "",
                         currentTrack = p.state?.currentTrack,
                         isPlaying = p.state?.isPlaying ?: false,
                         position = p.state?.position ?: 0L,
@@ -439,20 +464,7 @@ class ListenTogetherSession(
 
             MessageTypes.SYNC_PLAYBACK, MessageTypes.PLAYBACK_ACTION -> {
                 val p = payload as? PlaybackActionPayload ?: return
-                _state.update {
-                    it.copy(
-                        currentTrack = p.trackInfo ?: it.currentTrack,
-                        isPlaying =
-                            when (p.action) {
-                                PlaybackActions.PAUSE -> false
-                                PlaybackActions.PLAY -> true
-                                else -> it.isPlaying
-                            },
-                        position = if (p.action == PlaybackActions.SYNC_QUEUE) it.position else p.position,
-                        queue = p.queue.ifEmpty { it.queue },
-                        lastActionServerTime = p.capturedAtServerTime,
-                    )
-                }
+                _state.update { it.applyPlaybackAction(p) }
             }
 
             MessageTypes.SUGGESTION_RECEIVED -> {

@@ -114,7 +114,7 @@ class EqualizerAudioProcessor(
     // active and takes the bulk-copy path below, because activity is only reconsidered on
     // configure — long before the user drags a band and expects to hear it.
 
-    override fun onFlush() {
+    override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
         state.fill(0.0)
     }
 

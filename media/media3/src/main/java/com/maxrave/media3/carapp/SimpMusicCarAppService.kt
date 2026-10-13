@@ -138,8 +138,7 @@ internal class SimpMusicCarSession : Session() {
                                 android.media.session.MediaSession.Token::class.java,
                             )
                         if (result.resultCode == SessionResult.RESULT_SUCCESS && platformToken != null) {
-                            (carContext.getCarService(CarContext.MEDIA_PLAYBACK_SERVICE) as MediaPlaybackManager)
-                                .registerMediaPlaybackToken(MediaSessionCompat.Token.fromToken(platformToken))
+                            registerPlatformPlaybackToken(platformToken)
                         } else {
                             Logger.e(TAG, "Platform token missing from ${MEDIA_CUSTOM_COMMAND.GET_PLATFORM_TOKEN} result")
                         }
@@ -151,6 +150,17 @@ internal class SimpMusicCarSession : Session() {
                 Logger.e(TAG, "MediaBrowser connection failed: ${it.message}")
             }
         }, mainExecutor)
+    }
+
+    /**
+     * Car App Library 1.9 only accepts the legacy token wrapper, even for a Media3 session.
+     * This is the documented Android Auto bridge; playback itself remains on Media3.
+     * https://developer.android.com/training/cars/apps/media#create-your-playback-template
+     */
+    @Suppress("DEPRECATION")
+    private fun registerPlatformPlaybackToken(platformToken: android.media.session.MediaSession.Token) {
+        (carContext.getCarService(CarContext.MEDIA_PLAYBACK_SERVICE) as MediaPlaybackManager)
+            .registerMediaPlaybackToken(MediaSessionCompat.Token.fromToken(platformToken))
     }
 
     private companion object {
