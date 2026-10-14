@@ -298,8 +298,9 @@ internal class DelegatingForwardingPlayer(
         val nav = playlistNavigationProvider
         if (nav != null) {
             nav.seekToNext()
-        } else {
+        } else if (super.hasNextMediaItem()) {
             super.seekToNext()
+            super.play()
         }
     }
 
@@ -316,8 +317,9 @@ internal class DelegatingForwardingPlayer(
         val nav = playlistNavigationProvider
         if (nav != null) {
             nav.seekToNext()
-        } else {
+        } else if (super.hasNextMediaItem()) {
             super.seekToNextMediaItem()
+            super.play()
         }
     }
 

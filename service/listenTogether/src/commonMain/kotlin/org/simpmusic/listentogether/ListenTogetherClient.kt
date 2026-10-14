@@ -27,6 +27,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -109,7 +111,7 @@ class ListenTogetherClient(
         PROCESS_START.elapsedNow().inWholeMilliseconds
     },
     dispatcher: CoroutineContext = Dispatchers.Default,
-) : CoroutineScope {
+) : CoroutineScope, ListenTogetherTransport {
     override val coroutineContext: CoroutineContext = SupervisorJob() + dispatcher
 
     private val client: HttpClient =
@@ -124,7 +126,7 @@ class ListenTogetherClient(
     // server can produce: losing one protocol frame is a silent desync, which is strictly worse
     // than briefly slowing the reader. The server's own send buffer is 256.
     private val _events = MutableSharedFlow<ListenTogetherEvent>(extraBufferCapacity = 256)
-    val events: SharedFlow<ListenTogetherEvent> = _events.asSharedFlow()
+    override val events: SharedFlow<ListenTogetherEvent> = _events.asSharedFlow()
 
     private var codec = MessageCodec(compressionEnabled = true)
     private var session: DefaultClientWebSocketSession? = null
@@ -143,10 +145,10 @@ class ListenTogetherClient(
         get() = session?.isActive == true && handshake?.isCompleted == true
 
     /** Server wall time now, or null until the first pong has landed. */
-    fun serverNow(): Long? = serverClock.now()
+    override fun serverNow(): Long? = serverClock.now()
 
     /** See [ServerClock.positionAt]. Falls back to [position] whenever the clock cannot help. */
-    fun positionAt(
+    override fun positionAt(
         position: Long,
         effectiveAtServerTime: Long?,
         isPlaying: Boolean,
@@ -157,7 +159,7 @@ class ListenTogetherClient(
      *
      * Reconnection is automatic from here on; callers do not call this again after a drop.
      */
-    fun connect() {
+    override fun connect() {
         // A deliberate start by the user, so the attempt budget begins again. The retry path
         // deliberately calls [startConnection] instead of this: routing a retry through here would
         // reset the counter every time and [MAX_RECONNECT_ATTEMPTS] would never be reached — the
@@ -168,6 +170,10 @@ class ListenTogetherClient(
         startConnection()
     }
 
+    override fun forgetRoomSession() {
+        sessionToken = null
+    }
+
     private fun startConnection() {
         if (connectionJob?.isActive == true) {
             Logger.i(TAG, "Connect ignored — a connection is already active")
@@ -175,15 +181,18 @@ class ListenTogetherClient(
         }
         connectionJob =
             launch {
-                try {
-                    openAndRun()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Logger.e(TAG, "Connection error: ${e.stackTraceToString()}")
+                while (isActive) {
+                    try {
+                        openAndRun()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Connection error: ${e.message}")
+                    }
+                    // Keep retries in this same job. An old reader must never clear the new
+                    // socket or start another reconnect after a deliberate disconnect.
+                    if (!scheduleReconnect()) break
                 }
-                // Reached on every close, clean or not — openAndRun returns when the reader stops.
-                scheduleReconnect()
             }
     }
 
@@ -191,9 +200,9 @@ class ListenTogetherClient(
      * Sends one message. Returns false when there is no live socket, which the caller must treat
      * as "not sent" rather than retrying blindly: the reconnect path replays nothing.
      */
-    suspend fun send(
+    override suspend fun send(
         msgType: String,
-        payload: Any? = null,
+        payload: Any?,
     ): Boolean {
         val live = session ?: return false
         if (!live.isActive) return false
@@ -201,26 +210,28 @@ class ListenTogetherClient(
             live.send(Frame.Binary(true, codec.encode(msgType, payload)))
             true
         }.getOrElse { e ->
+            // Socket cancellation is a failed send; cancellation of the caller still propagates.
+            if (e is CancellationException) currentCoroutineContext().ensureActive()
             Logger.w(TAG, "Send failed for $msgType: ${e.message}")
             false
         }
     }
 
     /** Leaves for good: stops retrying, forgets the session token, closes the socket. */
-    fun disconnect() {
+    override fun disconnect() {
         Logger.i(TAG, "Disconnecting by request")
         sessionToken = null
         reconnectAttempts = 0
+        val previous = session
+        session = null
+        handshake = null
         connectionJob?.cancel()
         connectionJob = null
-        launch {
-            runCatching { session?.close() }
-            session = null
-        }
+        launch { runCatching { previous?.close() } }
     }
 
     /** Releases the HTTP client too. The instance is unusable afterwards. */
-    fun release() {
+    override fun release() {
         disconnect()
         runCatching { client.close() }
         cancel()
@@ -231,6 +242,7 @@ class ListenTogetherClient(
         Logger.i(TAG, "Connecting to $url")
         val live = client.webSocketSession(url)
         session = live
+        codec = MessageCodec(compressionEnabled = true)
         serverClock.reset()
         val pending = CompletableDeferred<ServerCapabilities>()
         handshake = pending
@@ -262,10 +274,6 @@ class ListenTogetherClient(
                 }
 
                 val token = sessionToken
-                if (token != null) {
-                    Logger.i(TAG, "Resuming with stored session token")
-                    send(MessageTypes.RECONNECT, ReconnectPayload(sessionToken = token))
-                }
 
                 // A completed handshake is what "connected" means, so the budget refills here and
                 // not merely when the socket opens — a server that accepts TCP but never answers
@@ -280,13 +288,20 @@ class ListenTogetherClient(
                     ),
                 )
 
+                if (token != null) {
+                    Logger.i(TAG, "Resuming with stored session token")
+                    send(MessageTypes.RECONNECT, ReconnectPayload(sessionToken = token))
+                }
+
                 val pinger = launch { pingLoop() }
                 reader.join()
                 pinger.cancel()
             }
         } finally {
-            handshake = null
-            session = null
+            if (session === live) {
+                handshake = null
+                session = null
+            }
             // NonCancellable because this runs on the disconnect() path too, where the job has
             // already been cancelled — and close() is itself a suspend call, so without this it
             // would abort immediately and the close frame would never be sent.
@@ -355,6 +370,7 @@ class ListenTogetherClient(
                 Logger.w(TAG, "Server error: ${error?.code} ${error?.message}")
                 // `error?.code in set` would not compile — Set<String>.contains takes a non-null
                 // String, and a null code is not a rejection anyway.
+                if (error != null && (error.code in EXPIRED_ROOM_ERROR_CODES || error.code == "host_not_allowed")) sessionToken = null
                 if (error != null && error.code in NON_RECOVERABLE_ERROR_CODES) {
                     Logger.e(TAG, "Server rejected this client (${error.code}) — not retrying")
                     fatal = true
@@ -390,10 +406,10 @@ class ListenTogetherClient(
         }
     }
 
-    private suspend fun scheduleReconnect() {
+    private suspend fun scheduleReconnect(): Boolean {
         if (fatal) {
             _events.emit(ListenTogetherEvent.Disconnected("Server rejected this client", willRetry = false))
-            return
+            return false
         }
 
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
@@ -408,7 +424,7 @@ class ListenTogetherClient(
                     willRetry = false,
                 ),
             )
-            return
+            return false
         }
 
         reconnectAttempts++
@@ -416,8 +432,7 @@ class ListenTogetherClient(
         _events.emit(ListenTogetherEvent.Disconnected("Connection lost", willRetry = true))
         delay(reconnectDelay)
         reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
-        connectionJob = null
-        startConnection()
+        return true
     }
 
     companion object {
@@ -458,5 +473,6 @@ class ListenTogetherClient(
          * connection, and must NOT stop retrying.
          */
         private val NON_RECOVERABLE_ERROR_CODES = setOf("unsupported_client")
+        internal val EXPIRED_ROOM_ERROR_CODES = setOf("session_not_found", "session_expired", "room_not_found")
     }
 }

@@ -327,8 +327,8 @@ interface DatabaseDao {
      * self-repair passes — see [refreshAlbumIfPlaceholder] and [refreshArtists] for why they exist
      * and why their WHERE clauses are what keep good data from being overwritten.
      */
-    @Transaction
     suspend fun insertSongs(songs: List<SongEntity>) {
+        echoLibraryMutation {
         songs.forEach { song ->
             val rowId = insertSong(song)
             if (rowId == -1L) {
@@ -349,6 +349,7 @@ interface DatabaseDao {
                     )
                 }
             }
+        }
         }
     }
 
@@ -675,15 +676,14 @@ interface DatabaseDao {
      *
      * @return the new playlist id, or -1 when the playlist row was not written.
      */
-    @Transaction
     suspend fun insertLocalPlaylistWithTracks(
         localPlaylist: LocalPlaylistEntity,
         videoIds: List<String>,
     ): Long {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         val playlistId = insertLocalPlaylist(localPlaylist)
-        if (playlistId == -1L) return@transaction -1L
+        if (playlistId == -1L) return@echoLibraryMutation -1L
         val addedAt = now()
         videoIds.forEachIndexed { index, videoId ->
             insertPairSongLocalPlaylist(
@@ -695,7 +695,7 @@ interface DatabaseDao {
                 ),
             )
         }
-        return@transaction playlistId
+        return@echoLibraryMutation playlistId
 
         }
     }
@@ -966,17 +966,16 @@ interface DatabaseDao {
      *
      * @return false when either index is outside the playlist.
      */
-    @Transaction
     suspend fun moveSongInPlaylist(
         playlistId: Long,
         fromIndex: Int,
         toIndex: Int,
     ): Boolean {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
-        if (getLocalPlaylist(playlistId) == null) return@transaction false
+        if (getLocalPlaylist(playlistId) == null) return@echoLibraryMutation false
         val pairs = getAllPlaylistPairSongByPosition(playlistId)
-        if (fromIndex !in pairs.indices || toIndex !in pairs.indices) return@transaction false
+        if (fromIndex !in pairs.indices || toIndex !in pairs.indices) return@echoLibraryMutation false
         val reordered = pairs.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
         EchoLibraryHooks.mutate(echoOrder(playlistId, reordered))
         val moved = pairs[fromIndex]
@@ -987,7 +986,7 @@ interface DatabaseDao {
             shiftPositionsForward(playlistId, target, moved.position)
         }
         echoRawEditPositionOfEntry(moved.id, target)
-        return@transaction true
+        return@echoLibraryMutation true
 
         }
     }
@@ -1157,7 +1156,6 @@ interface DatabaseDao {
     @Insert
     suspend fun insertEventArtist(eventArtist: EventArtistEntity)
 
-    @Transaction
     suspend fun insertPlaybackWithArtists(
         videoId: String,
         channelIds: List<String>,
@@ -1165,7 +1163,7 @@ interface DatabaseDao {
         durationSecond: Long,
         listenedSecond: Long,
     ): Long {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         val timestamp = now()
 
@@ -1197,7 +1195,7 @@ interface DatabaseDao {
                 ),
             )
         }
-        return@transaction eventId
+        return@echoLibraryMutation eventId
 
         }
     }
@@ -1221,9 +1219,8 @@ interface DatabaseDao {
     @Query("SELECT * FROM playback_event WHERE timestamp < :cutoffTimestamp")
     suspend fun echoOldPlaybackEvents(cutoffTimestamp: LocalDateTime): List<PlaybackEventEntity>
 
-    @Transaction
     suspend fun deleteOldPlaybackEvents(cutoffTimestamp: LocalDateTime) {
-        EchoLibraryHooks.transaction {
+        echoLibraryMutation {
             echoOldPlaybackEvents(cutoffTimestamp).forEach { event ->
                 EchoLibraryHooks.mutate(event.echoHistory(
                     EchoLibraryHooks.identity("history", event.eventId), emptyList(),
@@ -1713,134 +1710,120 @@ interface DatabaseDao {
     @Query("SELECT COALESCE(MAX(eventId),0)+1 FROM playback_event")
     suspend fun echoNextHistoryId(): Long
 
-    @Transaction
     suspend fun updateLiked(liked:Int, videoId:String, favoriteAt:LocalDateTime?=if(liked==1)now() else null) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         getSong(videoId)?.let { EchoLibraryHooks.mutate(it.copy(favoriteAt=favoriteAt).echoLike(liked!=1)) }
         echoRawUpdateLiked(liked,videoId,favoriteAt)
 
         }
     }
-    @Transaction
     suspend fun updateFollowed(followed:Int, channelId:String, followedAt:LocalDateTime?=if(followed==1)now() else null) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         getArtist(channelId)?.let { EchoLibraryHooks.mutate(it.copy(followedAt=followedAt).echoFollow(followed!=1)) }
         echoRawUpdateFollowed(followed,channelId,followedAt)
 
         }
     }
-    @Transaction
     suspend fun updateAlbumLiked(liked:Int,browseId:String,favoriteAt:LocalDateTime?=if(liked==1)now() else null) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         getAlbum(browseId)?.let { EchoLibraryHooks.mutate(it.copy(favoriteAt=favoriteAt).echoLike(liked!=1)) }
         echoRawUpdateAlbumLiked(liked,browseId,favoriteAt)
 
         }
     }
-    @Transaction
     suspend fun updatePlaylistLiked(liked:Int,playlistId:String,favoriteAt:LocalDateTime?=if(liked==1)now() else null) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         getPlaylist(playlistId)?.let { EchoLibraryHooks.mutate(it.copy(favoriteAt=favoriteAt).echoLike(liked!=1)) }
         echoRawUpdatePlaylistLiked(liked,playlistId,favoriteAt)
 
         }
     }
-    @Transaction
     suspend fun insertSong(song:SongEntity):Long {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         if(song.liked)EchoLibraryHooks.mutate(song.echoLike())
-        return@transaction echoRawInsertSong(song)
+        return@echoLibraryMutation echoRawInsertSong(song)
 
         }
     }
-    @Transaction
     suspend fun insertArtist(artist:ArtistEntity) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         if(artist.followed)EchoLibraryHooks.mutate(artist.echoFollow())
         echoRawInsertArtist(artist)
 
         }
     }
-    @Transaction
     suspend fun insertAlbum(album:AlbumEntity):Long {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         if(album.liked)EchoLibraryHooks.mutate(album.echoLike())
-        return@transaction echoRawInsertAlbum(album)
+        return@echoLibraryMutation echoRawInsertAlbum(album)
 
         }
     }
-    @Transaction
     suspend fun insertPlaylist(playlist:PlaylistEntity) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         if(playlist.liked)EchoLibraryHooks.mutate(playlist.echoLike())
         echoRawInsertPlaylist(playlist)
 
         }
     }
-    @Transaction
     suspend fun insertAndReplacePlaylist(playlist:PlaylistEntity) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         if(playlist.liked)EchoLibraryHooks.mutate(playlist.echoLike())
         echoRawInsertAndReplacePlaylist(playlist)
 
         }
     }
-    @Transaction
     suspend fun insertLocalPlaylist(localPlaylist:LocalPlaylistEntity):Long {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         val id = if(localPlaylist.id==0L)EchoLibraryHooks.reservePlaylistId(echoNextPlaylistId()) else localPlaylist.id
-        if(echoRawGetLocalPlaylist(id)!=null)return@transaction -1L
+        if(echoRawGetLocalPlaylist(id)!=null)return@echoLibraryMutation -1L
         val value=localPlaylist.copy(id=id)
         EchoLibraryHooks.mutate(value.echoPlaylist(EchoLibraryHooks.identity("playlist",id)))
-        return@transaction echoRawInsertLocalPlaylist(value)
+        return@echoLibraryMutation echoRawInsertLocalPlaylist(value)
 
         }
     }
-    @Transaction
     suspend fun deleteLocalPlaylist(id:Long) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
-        val playlist=getLocalPlaylist(id) ?: return@transaction
+        val playlist=getLocalPlaylist(id) ?: return@echoLibraryMutation
         EchoLibraryHooks.mutate(playlist.echoPlaylist(EchoLibraryHooks.identity("playlist",id),true))
         echoRawDeleteLocalPlaylist(id)
 
         }
     }
-    @Transaction
     suspend fun updateLocalPlaylistTitle(title:String,id:Long) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
-        val playlist=getLocalPlaylist(id) ?: return@transaction
+        val playlist=getLocalPlaylist(id) ?: return@echoLibraryMutation
         EchoLibraryHooks.mutate(playlist.copy(title=title).echoPlaylist(EchoLibraryHooks.identity("playlist",id)))
         echoRawUpdateLocalPlaylistTitle(title,id)
 
         }
     }
-    @Transaction
     suspend fun updateLocalPlaylistThumbnail(thumbnail:String,id:Long) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
-        val playlist=getLocalPlaylist(id) ?: return@transaction
+        val playlist=getLocalPlaylist(id) ?: return@echoLibraryMutation
         EchoLibraryHooks.mutate(playlist.copy(thumbnail=thumbnail).echoPlaylist(EchoLibraryHooks.identity("playlist",id)))
         echoRawUpdateLocalPlaylistThumbnail(thumbnail,id)
 
         }
     }
-    @Transaction
     suspend fun insertPairSongLocalPlaylist(pairSongLocalPlaylist:PairSongLocalPlaylist) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
-        if(getLocalPlaylist(pairSongLocalPlaylist.playlistId)==null)return@transaction
+        if(getLocalPlaylist(pairSongLocalPlaylist.playlistId)==null)return@echoLibraryMutation
         val id=if(pairSongLocalPlaylist.id==0)EchoLibraryHooks.reserveLocalId("entry",echoNextEntryId()).toInt() else pairSongLocalPlaylist.id
         val value=pairSongLocalPlaylist.copy(id=id)
         getSong(value.songId)?.let { song ->
@@ -1850,11 +1833,10 @@ interface DatabaseDao {
 
         }
     }
-    @Transaction
     suspend fun deletePairSongLocalPlaylist(playlistId:Long,videoId:String) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
-        if(getLocalPlaylist(playlistId)==null)return@transaction
+        if(getLocalPlaylist(playlistId)==null)return@echoLibraryMutation
         getAllPlaylistPairSongByPosition(playlistId).filter{it.songId==videoId}.forEach { pair ->
             getSong(videoId)?.let { song -> EchoLibraryHooks.mutate(pair.echoEntry(EchoLibraryHooks.identity("entry",pair.id.toLong()),EchoLibraryHooks.identity("playlist",playlistId),song,true)) }
         }
@@ -1862,20 +1844,18 @@ interface DatabaseDao {
 
         }
     }
-    @Transaction
     suspend fun editPositionOfSongInPlaylist(playlistId:Long,videoId:String,newPosition:Int) {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
-        if(getLocalPlaylist(playlistId)==null)return@transaction
+        if(getLocalPlaylist(playlistId)==null)return@echoLibraryMutation
         val pairs=getAllPlaylistPairSongByPosition(playlistId).map{if(it.songId==videoId)it.copy(position=newPosition) else it}.sortedBy{it.position}
         EchoLibraryHooks.mutate(echoOrder(playlistId,pairs))
         echoRawEditPositionOfSongInPlaylist(playlistId,videoId,newPosition)
 
         }
     }
-    @Transaction
     suspend fun deleteAllPlaybackEvents() {
-        return EchoLibraryHooks.transaction {
+        return echoLibraryMutation {
 
         EchoLibraryHooks.mutate(LibraryRecord(LibraryKind.HISTORY_CLEAR,"history",payload=JsonObject(emptyMap()),deleted=true))
         echoRawDeleteAllPlaybackEvents()
@@ -1919,7 +1899,6 @@ interface DatabaseDao {
     suspend fun getPlaylistPairSongByTitle(playlistId:Long,offset:Int):List<PairSongLocalPlaylist> = if(echoPlaylistVisible(playlistId))echoRawGetPlaylistPairSongByTitle(playlistId,offset) else emptyList()
     fun getDownloadStateFlowOfLocalPlaylist(id:Long):Flow<Int> = echoRawGetDownloadStateFlowOfLocalPlaylist(id).map { if(echoPlaylistVisible(id))it else 0 }
     fun getListTracksFlowOfLocalPlaylist(id:Long):Flow<List<String>> = echoRawGetListTracksFlowOfLocalPlaylist(id).map { if(echoPlaylistVisible(id))it else emptyList() }
-    @Transaction
-    suspend fun updateLocalPlaylistTracks(tracks:List<String>,id:Long) { EchoLibraryHooks.transaction { if(echoPlaylistVisible(id))echoRawUpdateLocalPlaylistTracks(tracks,id) } }
+    suspend fun updateLocalPlaylistTracks(tracks:List<String>,id:Long) { echoLibraryMutation { if(echoPlaylistVisible(id))echoRawUpdateLocalPlaylistTracks(tracks,id) } }
 
 }

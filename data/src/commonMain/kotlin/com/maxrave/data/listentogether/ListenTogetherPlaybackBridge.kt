@@ -76,28 +76,21 @@ class ListenTogetherPlaybackBridge(
     private var lastAppliedQueueIds: List<String> = emptyList()
     private var lastAppliedRoomCode: String? = null
 
-    /**
-     * Whether the room was playing before the command currently being applied.
-     *
-     * Needed because change_track always says "not playing" — see [watchRoomForGuests].
-     */
-    private var lastRoomPlaying = false
-
     /** Idempotent: callers cannot know whether something else already started it. */
     fun start() {
         if (started) return
         started = true
         Logger.i(TAG, "Playback bridge started")
-        scope.launch { suppressCrossfadeWhileInRoom() }
-        scope.launch { watchRoomForGuests() }
-        scope.launch { resyncGuestOnResume() }
-        scope.launch { publishCurrentStateOnJoin() }
-        scope.launch { publishStateWhenSomeoneArrives() }
-        scope.launch { publishQueueAsHost() }
-        scope.launch { publishTrackChangesAsHost() }
-        scope.launch { publishPlayPauseAsHost() }
-        scope.launch { publishSeeksAsHost() }
-        scope.launch { answerBufferBarrier() }
+        scope.launch(Dispatchers.Main.immediate) { suppressCrossfadeWhileInRoom() }
+        scope.launch(Dispatchers.Main.immediate) { watchRoomForGuests() }
+        scope.launch(Dispatchers.Main.immediate) { resyncGuestOnResume() }
+        scope.launch(Dispatchers.Main.immediate) { publishCurrentStateOnJoin() }
+        scope.launch(Dispatchers.Main.immediate) { publishStateWhenSomeoneArrives() }
+        scope.launch(Dispatchers.Main.immediate) { publishQueueAsHost() }
+        scope.launch(Dispatchers.Main.immediate) { publishTrackChangesAsHost() }
+        scope.launch(Dispatchers.Main.immediate) { publishPlayPauseAsHost() }
+        scope.launch(Dispatchers.Main.immediate) { publishSeeksAsHost() }
+        scope.launch(Dispatchers.Main.immediate) { answerBufferBarrier() }
     }
 
     /**
@@ -112,9 +105,7 @@ class ListenTogetherPlaybackBridge(
             .distinctUntilChanged()
             .collect { inRoom ->
                 withContext(Dispatchers.Main) { handler.player.crossfadeSuppressed = inRoom }
-                if (!inRoom) {
-                    lastRoomPlaying = false
-                } else if (!repository.room.value.isHost) {
+                if (inRoom && !repository.room.value.isHost) {
                     // Ask for the live position the moment we are in. The state pushed on join
                     // carries the position as of the host's LAST command, which can be minutes old
                     // — obeying it drops a joiner at the start of a song everyone else is halfway
@@ -164,7 +155,7 @@ class ListenTogetherPlaybackBridge(
                     isPlaying = it.isPlaying,
                     position = it.position,
                     queueIds = it.queue.map { t -> t.id },
-                ) to (it.inRoom && !it.isHost)
+                ) to (it.inRoom && it.isConnected && !it.isHost)
             }
             .distinctUntilChanged()
             .collectLatest { (snapshot, shouldFollow) ->
@@ -174,7 +165,6 @@ class ListenTogetherPlaybackBridge(
                     lastAppliedRoomCode = if (shouldFollow) snapshot.roomCode else null
                     lastAppliedTrackId = null
                     lastAppliedQueueIds = emptyList()
-                    lastRoomPlaying = false
                 }
                 if (!shouldFollow) return@collectLatest
                 val track = snapshot.track
@@ -189,13 +179,9 @@ class ListenTogetherPlaybackBridge(
                     val queueChanged = queueIds != lastAppliedQueueIds
                     val trackChanged =
                         track != null && track.id.isNotBlank() && (track.id != lastAppliedTrackId || queueChanged)
-                    // The server forces IsPlaying=false on EVERY change_track — protocol default,
-                    // not the host pausing. Obeying it pauses the track just loaded, which is why
-                    // the guest sat silent on next, prev AND end-of-song alike. Carry the room's
-                    // previous intent across the change; a real pause arrives as its own command,
-                    // with the track unchanged, and is applied normally.
-                    val playing = if (trackChanged && !isPlaying) lastRoomPlaying else isPlaying
-                    lastRoomPlaying = playing
+                    // CHANGE_TRACK prepares a paused item. Only the explicit host PLAY
+                    // resumes it, so a host changing songs while paused stays paused.
+                    val playing = isPlaying
                     if (trackChanged) {
                         val sameTrack = track.id == lastAppliedTrackId
                         // Decided BEFORE loading, not corrected afterwards: loading with a hardcoded
@@ -334,7 +320,7 @@ class ListenTogetherPlaybackBridge(
      */
     private suspend fun publishCurrentStateOnJoin() {
         repository.room
-            .map { it.inRoom && it.isHost }
+            .map { it.inRoom && it.isConnected && it.isHost }
             .distinctUntilChanged()
             .collect { isHosting -> if (isHosting) publishSnapshot() }
     }
@@ -527,16 +513,24 @@ class ListenTogetherPlaybackBridge(
      */
     private suspend fun answerBufferBarrier() {
         repository.room
-            .map { it.waitingFor to it.currentTrack?.id }
+            .map { Triple(it.roomCode, it.waitingFor, it.currentTrack?.id) }
             .distinctUntilChanged()
-            .collect { (waitingFor, trackId) ->
+            .collectLatest { (roomCode, waitingFor, trackId) ->
                 val state = repository.room.value
-                if (trackId.isNullOrBlank() || !state.inRoom) return@collect
-                if (state.selfUserId !in waitingFor) return@collect
-                // bufferedPercentage, not isPlaying: the barrier asks whether the track is loaded,
-                // and playback is exactly what it is holding back.
-                if (handler.player.bufferedPercentage >= READY_BUFFER_PERCENT) {
-                    session.reportBufferReady(trackId)
+                if (trackId.isNullOrBlank() || !state.inRoom || state.selfUserId !in waitingFor) return@collectLatest
+                // Room state does not emit when Media3 finishes buffering. Keep watching the
+                // actual loaded item until ready; cancel on leave, new track, or a new barrier.
+                while (true) {
+                    val current = repository.room.value
+                    if (current.roomCode != roomCode || current.currentTrack?.id != trackId || current.selfUserId !in current.waitingFor) break
+                    val ready = withContext(Dispatchers.Main) {
+                        mayReportRoomBufferReady(current, handler.player.currentMediaItem?.mediaId, handler.player.bufferedPercentage)
+                    }
+                    if (ready) {
+                        session.reportBufferReady(trackId)
+                        break
+                    }
+                    delay(PLAY_SETTLE_POLL_MS)
                 }
             }
     }
@@ -577,6 +571,5 @@ class ListenTogetherPlaybackBridge(
          * progress tick interval so ordinary drift never trips it.
          */
         const val SEEK_DETECT_MS = 2_500L
-        const val READY_BUFFER_PERCENT = 5
     }
 }

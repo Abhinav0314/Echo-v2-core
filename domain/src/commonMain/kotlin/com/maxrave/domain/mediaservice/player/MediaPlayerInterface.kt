@@ -31,6 +31,18 @@ interface MediaPlayerInterface {
 
     fun seekToNext()
 
+    /**
+     * Explicit user Next command: advance and start the next track, even while paused.
+     * No next item means no change. Ordinary seeks and automatic queue updates must use
+     * [seekToNext] instead. Asynchronous adapters override this to make the transition
+     * atomic, without briefly resuming the outgoing track.
+     */
+    fun skipToNextAndPlay() {
+        if (!hasNextMediaItem()) return
+        seekToNext()
+        play()
+    }
+
     fun seekToPrevious()
 
     /**

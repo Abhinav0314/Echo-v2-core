@@ -489,6 +489,8 @@ internal class SongRepositoryImpl(
 
     override suspend fun addToYouTubeLiked(mediaId: String?): Flow<Int> =
         flow {
+            // Native Echo/Google identity does not grant a YouTube Music cookie session.
+            if (youTube.cookie.isNullOrBlank()) { emit(401);return@flow }
             if (mediaId != null) {
                 runCatching {
                     youTube
@@ -506,6 +508,7 @@ internal class SongRepositoryImpl(
 
     override suspend fun removeFromYouTubeLiked(mediaId: String?): Flow<Int> =
         flow {
+            if (youTube.cookie.isNullOrBlank()) { emit(401);return@flow }
             if (mediaId != null) {
                 runCatching {
                     youTube

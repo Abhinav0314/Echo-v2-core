@@ -453,7 +453,8 @@ internal class CrossfadeExoPlayerAdapter(
 
                 override fun hasPreviousMediaItem(): Boolean = this@CrossfadeExoPlayerAdapter.hasPreviousMediaItem()
 
-                override fun seekToNext(): Unit = this@CrossfadeExoPlayerAdapter.seekToNext()
+                // MediaController Next is user intent, distinct from automatic queue advancement.
+                override fun seekToNext(): Unit = this@CrossfadeExoPlayerAdapter.skipToNextAndPlay()
 
                 override fun seekToPrevious(): Unit = this@CrossfadeExoPlayerAdapter.seekToPrevious()
 
@@ -787,29 +788,34 @@ internal class CrossfadeExoPlayerAdapter(
         if (mediaItemIndex !in playlist.indices) return
 
         coroutineScope.launch {
-            val shouldPlay = internalPlayWhenReady
-
-            // Cancel any ongoing crossfade
-            if (isCrossfading) {
-                Logger.d(TAG, "seekTo: Cancelling crossfade")
-                crossfadeJob?.cancel()
-                crossfadeJob = null
-                currentPlayerFilter?.enabled = false
-                secondaryPlayerFilter?.enabled = false
-                secondaryPlayer?.release()
-                secondaryPlayer = null
-                secondaryPlayerFilter = null
-                setCrossfading(false)
-            }
-
-            // Cancel any ongoing load
-            currentLoadJob?.cancel()
-
-            // Load the new track
-            localCurrentMediaItemIndex = mediaItemIndex
-            unpinCurrent()
-            loadAndPlayTrackInternal(mediaItemIndex, positionMs, shouldPlay)
+            seekToMediaItemInternal(mediaItemIndex, positionMs, internalPlayWhenReady)
         }
+    }
+
+    /** Executes on the adapter scope; the caller supplies intent for this transition only. */
+    private fun seekToMediaItemInternal(mediaItemIndex: Int, positionMs: Long, shouldPlay: Boolean) {
+        if (mediaItemIndex !in playlist.indices) return
+
+        // Cancel any ongoing crossfade
+        if (isCrossfading) {
+            Logger.d(TAG, "seekTo: Cancelling crossfade")
+            crossfadeJob?.cancel()
+            crossfadeJob = null
+            currentPlayerFilter?.enabled = false
+            secondaryPlayerFilter?.enabled = false
+            secondaryPlayer?.release()
+            secondaryPlayer = null
+            secondaryPlayerFilter = null
+            setCrossfading(false)
+        }
+
+        // Cancel any ongoing load
+        currentLoadJob?.cancel()
+
+        // Load the new track
+        localCurrentMediaItemIndex = mediaItemIndex
+        unpinCurrent()
+        loadAndPlayTrackInternal(mediaItemIndex, positionMs, shouldPlay)
     }
 
     override fun seekBack() {
@@ -823,7 +829,11 @@ internal class CrossfadeExoPlayerAdapter(
         seekTo(newPosition)
     }
 
-    override fun seekToNext() {
+    override fun seekToNext() = advanceToNext(startPlaying = false)
+
+    override fun skipToNextAndPlay() = advanceToNext(startPlaying = true)
+
+    private fun advanceToNext(startPlaying: Boolean) {
         coroutineScope.launch {
             // During crossfade A→A+1, "next" commits A+1 as current (Direction 1: the UI already
             // shows A+1) and then advances to A+2. Outside crossfade it advances normally.
@@ -833,7 +843,14 @@ internal class CrossfadeExoPlayerAdapter(
                 commitIncomingAsCurrentInternal()
             }
             if (hasNextMediaItem()) {
-                seekTo(getNextMediaItemIndex(), 0)
+                val nextIndex = getNextMediaItemIndex()
+                if (nextIndex !in playlist.indices) return@launch
+                if (startPlaying) {
+                    // Set intent without calling play() on the outgoing paused player.
+                    // Only the newly loaded track (or the receiver queue) starts playing.
+                    internalPlayWhenReady = true
+                }
+                seekToMediaItemInternal(nextIndex, 0, internalPlayWhenReady)
             } else if (wasCrossfading) {
                 // A+1 was the last track — stay on it (already promoted), just refresh metadata.
                 forwardingPlayer.notifyMediaItemChanged()

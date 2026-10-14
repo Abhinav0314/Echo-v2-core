@@ -377,7 +377,15 @@ internal class LocalPlaylistRepositoryImpl(
         errorMessage: String,
     ) = flow<LocalResource<String>> {
         emit(LocalResource.Loading())
-        val playlist = localDataSource.getLocalPlaylist(playlistId) ?: return@flow
+        if (youTube.cookie.isNullOrBlank()) {
+            emit(LocalResource.Error("Sign in to YouTube in settings to publish this playlist. Echo account library sync is automatic."))
+            return@flow
+        }
+        val playlist = localDataSource.getLocalPlaylist(playlistId)
+        if (playlist == null) {
+            emit(LocalResource.Error("This playlist is no longer in the current Echo library."))
+            return@flow
+        }
         val res =
             youTube.createPlaylist(
                 playlist.title,

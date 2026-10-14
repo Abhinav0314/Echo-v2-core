@@ -1,6 +1,10 @@
 package org.simpmusic.listentogether
 
 import com.maxrave.logger.Logger
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -95,22 +99,56 @@ data class ListenTogetherState(
 
 /** Applies the protocol's distinction between a queue replacement and omitted transport fields. */
 internal fun ListenTogetherState.applyPlaybackAction(payload: PlaybackActionPayload): ListenTogetherState {
-    val replacesQueue = payload.action == PlaybackActions.SYNC_QUEUE || payload.queue.isNotEmpty()
+    val queueMutation = payload.action in setOf(PlaybackActions.SYNC_QUEUE, PlaybackActions.QUEUE_ADD, PlaybackActions.QUEUE_REMOVE, PlaybackActions.QUEUE_CLEAR)
+    val preservesPosition = queueMutation || payload.action == PlaybackActions.SET_VOLUME
+    val replacesQueue = queueMutation || payload.action == PlaybackActions.CHANGE_TRACK || payload.queue.isNotEmpty()
     return copy(
-        currentTrack = payload.trackInfo ?: currentTrack,
+        currentTrack = if (queueMutation) currentTrack else payload.trackInfo ?: currentTrack,
         isPlaying = when (payload.action) {
-            PlaybackActions.PAUSE -> false
+            PlaybackActions.PAUSE, PlaybackActions.CHANGE_TRACK -> false
             PlaybackActions.PLAY -> true
             else -> isPlaying
         },
-        position = if (payload.action == PlaybackActions.SYNC_QUEUE) position else payload.position,
+        position = if (preservesPosition) position else payload.position,
         // SYNC_QUEUE is an explicit replacement, including an empty list. PLAY/PAUSE/SEEK
         // default queue=[] means that the sender omitted the queue, so keep the existing one.
         queue = if (replacesQueue) payload.queue else queue,
         queueTitle = if (replacesQueue) payload.queueTitle else payload.queueTitle.ifEmpty { queueTitle },
-        lastActionServerTime = payload.capturedAtServerTime,
+        // The server has already compensated host-to-server transit in position. Using
+        // capturedAtServerTime here counts that transit twice. Queue-only commands do not
+        // move the playhead and must keep its original timing anchor.
+        lastActionServerTime = if (preservesPosition) lastActionServerTime
+            else payload.serverTime.takeIf { it > 0L } ?: payload.capturedAtServerTime,
     )
 }
+
+/** An authoritative snapshot includes an empty queue and a fresh playback clock anchor. */
+internal fun ListenTogetherState.applySyncState(payload: SyncStatePayload) = copy(
+    currentTrack = payload.currentTrack,
+    isPlaying = payload.isPlaying,
+    position = payload.position,
+    queue = payload.queue,
+    queueTitle = if (payload.queue.isEmpty()) "" else queueTitle,
+    lastActionServerTime = payload.lastUpdate,
+)
+
+internal fun ListenTogetherState.applyReconnected(payload: ReconnectedPayload) = copy(
+    roomCode = payload.roomCode,
+    selfUserId = payload.userId,
+    isHost = payload.isHost,
+    members = payload.state?.users.orEmpty().map { it.toMember() },
+    currentTrack = payload.state?.currentTrack,
+    isPlaying = payload.state?.isPlaying ?: false,
+    position = payload.state?.position ?: 0L,
+    queue = payload.state?.queue.orEmpty(),
+    queueTitle = if (payload.roomCode == roomCode && payload.state?.queue?.isNotEmpty() == true) queueTitle else "",
+    lastActionServerTime = payload.state?.lastUpdate ?: 0L,
+    waitingFor = emptyList(),
+    joinRequests = emptyList(),
+    suggestions = emptyList(),
+    pendingJoinCode = null,
+    error = null,
+)
 
 /**
  * The room state machine.
@@ -121,7 +159,7 @@ internal fun ListenTogetherState.applyPlaybackAction(payload: PlaybackActionPayl
  * written twice.
  */
 class ListenTogetherSession(
-    private val client: ListenTogetherClient,
+    private val client: ListenTogetherTransport,
     dispatcher: CoroutineContext = Dispatchers.Default,
 ) : CoroutineScope {
     override val coroutineContext: CoroutineContext = SupervisorJob() + dispatcher
@@ -130,6 +168,47 @@ class ListenTogetherSession(
     val state: StateFlow<ListenTogetherState> = _state.asStateFlow()
 
     private var pump: Job? = null
+    private var serverVersion = ""
+
+    private data class OutgoingPlayback(
+        val roomCode: String?,
+        val userId: String,
+        val payload: PlaybackActionPayload,
+        val completion: CompletableDeferred<Unit>,
+    )
+    private val playbackCommands = Channel<OutgoingPlayback>(Channel.UNLIMITED)
+
+    init {
+        launch {
+            try {
+                for (command in playbackCommands) {
+                    try {
+                        val current = _state.value
+                        if (current.inRoom && current.isConnected && current.isHost && current.roomCode == command.roomCode && current.selfUserId == command.userId) {
+                            client.send(MessageTypes.PLAYBACK_ACTION, command.payload)
+                        }
+                    } finally {
+                        command.completion.complete(Unit)
+                    }
+                }
+            } finally {
+                while (true) {
+                    val queued = playbackCommands.tryReceive().getOrNull() ?: break
+                    queued.completion.cancel()
+                }
+            }
+        }
+    }
+
+    /** Queue in call order, so PLAY can never overtake the CHANGE_TRACK it belongs to. */
+    private fun enqueuePlayback(payload: PlaybackActionPayload): Job {
+        val completion = CompletableDeferred<Unit>()
+        val current = _state.value
+        if (playbackCommands.trySend(OutgoingPlayback(current.roomCode, current.selfUserId, payload, completion)).isFailure) {
+            completion.complete(Unit)
+        }
+        return completion
+    }
 
     /** Host-side conveniences from settings; both default off, matching the design's toggles. */
     var autoApproveJoins: Boolean = false
@@ -137,8 +216,9 @@ class ListenTogetherSession(
 
     /** Opens the socket. Joining a room is a separate, later step. */
     fun connect() {
+        if (_state.value.connection is ConnectionState.Connected || _state.value.connection is ConnectionState.Connecting) return
         if (pump == null) {
-            pump = launch { client.events.collect(::onEvent) }
+            pump = launch(start = CoroutineStart.UNDISPATCHED) { client.events.collect(::onEvent) }
         }
         _state.update { it.copy(connection = ConnectionState.Connecting, error = null) }
         client.connect()
@@ -152,7 +232,9 @@ class ListenTogetherSession(
     fun createRoom(username: String) =
         launch {
             pendingUsername = username.trim()
-            client.send(MessageTypes.CREATE_ROOM, CreateRoomPayload(username = pendingUsername))
+            if (!client.send(MessageTypes.CREATE_ROOM, CreateRoomPayload(username = pendingUsername))) {
+                _state.update { it.copy(error = "Not connected") }
+            }
         }
 
     fun joinRoom(
@@ -176,19 +258,8 @@ class ListenTogetherSession(
             client.send(MessageTypes.LEAVE_ROOM, LeaveRoomPayload())
             // The server sends nothing back for leave_room, so the local state is cleared here —
             // waiting for a confirmation that never arrives would leave the room UI on screen.
-            _state.update {
-                it.copy(
-                    roomCode = null,
-                    isHost = false,
-                    members = emptyList(),
-                    joinRequests = emptyList(),
-                    suggestions = emptyList(),
-                    currentTrack = null,
-                    queue = emptyList(),
-                    queueTitle = "",
-                    waitingFor = emptyList(),
-                )
-            }
+            client.forgetRoomSession()
+            _state.update { ListenTogetherState(connection = it.connection) }
         }
 
     fun approveJoin(userId: String) =
@@ -239,9 +310,7 @@ class ListenTogetherSession(
         trackInfo: TrackInfo?,
         queue: List<TrackInfo> = emptyList(),
         queueTitle: String = "",
-    ) = launch {
-        client.send(
-            MessageTypes.PLAYBACK_ACTION,
+    ) = enqueuePlayback(
             PlaybackActionPayload(
                 action = action,
                 trackId = trackId,
@@ -256,23 +325,19 @@ class ListenTogetherSession(
                 capturedAtServerTime = client.serverNow() ?: 0L,
             ),
         )
-    }
 
     /** Publishes the whole queue. Host only; guests take the host's order verbatim. */
     fun sendQueue(
         tracks: List<TrackInfo>,
         queueTitle: String,
-    ) = launch {
-        client.send(
-            MessageTypes.PLAYBACK_ACTION,
-            PlaybackActionPayload(
-                action = PlaybackActions.SYNC_QUEUE,
-                queue = tracks,
-                queueTitle = queueTitle,
-                capturedAtServerTime = client.serverNow() ?: 0L,
-            ),
-        )
-    }
+    ) = sendPlaybackAction(
+        action = PlaybackActions.SYNC_QUEUE,
+        trackId = "",
+        position = 0L,
+        trackInfo = null,
+        queue = tracks,
+        queueTitle = queueTitle,
+    )
 
     /** See `ServerClock.positionAt` — corrects a room position for time spent in flight. */
     fun positionAt(
@@ -300,6 +365,8 @@ class ListenTogetherSession(
 
     fun release() {
         client.release()
+        playbackCommands.close()
+        cancel()
         pump = null
     }
 
@@ -308,8 +375,13 @@ class ListenTogetherSession(
 
     private fun onEvent(event: ListenTogetherEvent) {
         when (event) {
-            is ListenTogetherEvent.Connected ->
-                _state.update { it.copy(connection = ConnectionState.Connected(event.serverVersion)) }
+            is ListenTogetherEvent.Connected -> {
+                serverVersion = event.serverVersion
+                _state.update {
+                    // A resumed socket is not a restored room until RECONNECTED confirms it.
+                    it.copy(connection = if (event.resumed) ConnectionState.Connecting else ConnectionState.Connected(event.serverVersion))
+                }
+            }
 
             is ListenTogetherEvent.ClockReady -> Unit
 
@@ -365,6 +437,8 @@ class ListenTogetherSession(
                         currentTrack = p.state?.currentTrack,
                         isPlaying = p.state?.isPlaying ?: false,
                         position = p.state?.position ?: 0L,
+                        lastActionServerTime = p.state?.lastUpdate ?: 0L,
+                        error = null,
                     )
                 }
             }
@@ -448,18 +522,14 @@ class ListenTogetherSession(
             MessageTypes.BUFFER_COMPLETE ->
                 _state.update { s -> s.copy(waitingFor = emptyList(), members = s.members.map { it.copy(isBuffering = false) }) }
 
+            MessageTypes.RECONNECTED -> {
+                val p = payload as? ReconnectedPayload ?: return
+                _state.update { it.applyReconnected(p).copy(connection = ConnectionState.Connected(serverVersion)) }
+            }
+
             MessageTypes.SYNC_STATE -> {
                 val p = payload as? SyncStatePayload ?: return
-                _state.update {
-                    it.copy(
-                        currentTrack = p.currentTrack,
-                        isPlaying = p.isPlaying,
-                        position = p.position,
-                        // Only replace the queue when the server actually sent one — sync_state
-                        // with an empty queue means "nothing to say", not "the queue is empty".
-                        queue = p.queue.ifEmpty { it.queue },
-                    )
-                }
+                _state.update { it.applySyncState(p) }
             }
 
             MessageTypes.SYNC_PLAYBACK, MessageTypes.PLAYBACK_ACTION -> {
@@ -490,8 +560,15 @@ class ListenTogetherSession(
                 if (p.code != "rate_limited") {
                     Logger.w(TAG, "Server error ${p.code}: ${p.message}")
                     // An error while waiting to be let in ends that wait — most often a bad code.
+                    val message = if (p.code == "host_not_allowed") {
+                        "This server does not allow Echo to host rooms. Choose an Echo-approved server in Listen Together settings. You can still join rooms when the server permits it."
+                    } else p.message.ifBlank { p.code }
                     _state.update {
-                        it.copy(pendingJoinCode = null, error = p.message.ifBlank { p.code })
+                        if (p.code in ListenTogetherClient.EXPIRED_ROOM_ERROR_CODES || (p.code == "host_not_allowed" && it.connection is ConnectionState.Connecting)) {
+                            ListenTogetherState(connection = ConnectionState.Connected(serverVersion), error = message)
+                        } else {
+                            it.copy(pendingJoinCode = null, error = message)
+                        }
                     }
                 }
             }

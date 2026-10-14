@@ -55,6 +55,68 @@ class PlaybackQueueStateTest {
     }
 
     @Test
+    fun compensatedPlaybackUsesServerReceiptTimeInsteadOfCountingHostTransitTwice() {
+        val state = original.applyPlaybackAction(PlaybackActionPayload(
+            action = PlaybackActions.PLAY, position = 45_200L,
+            capturedAtServerTime = 1_000L, serverTime = 1_200L,
+        ))
+        assertEquals(45_200L, state.position)
+        assertEquals(1_200L, state.lastActionServerTime)
+    }
+
+    @Test
+    fun queueOnlyUpdatePreservesPlaybackTimingAnchor() {
+        val state = original.copy(lastActionServerTime = 1_000L).applyPlaybackAction(PlaybackActionPayload(
+            action = PlaybackActions.SYNC_QUEUE, serverTime = 2_000L, capturedAtServerTime = 1_900L,
+        ))
+        assertEquals(1_000L, state.lastActionServerTime)
+    }
+
+    @Test
+    fun authoritativeSyncClearsDeletedQueueAndReplacesStaleClockAnchor() {
+        val state = original.copy(lastActionServerTime = 1_000L).applySyncState(SyncStatePayload(
+            currentTrack = current, position = 50_000L, isPlaying = true, lastUpdate = 5_000L,
+            queue = emptyList(),
+        ))
+        assertEquals(emptyList(), state.queue)
+        assertEquals("", state.queueTitle)
+        assertEquals(5_000L, state.lastActionServerTime)
+        assertEquals(50_000L, state.position)
+    }
+
+    @Test
+    fun changeTrackPreparesPausedItemUntilExplicitHostPlay() {
+        val changed = original.applyPlaybackAction(PlaybackActionPayload(
+            action = PlaybackActions.CHANGE_TRACK, trackInfo = upcoming,
+        ))
+        assertFalse(changed.isPlaying)
+        assertTrue(changed.applyPlaybackAction(PlaybackActionPayload(action = PlaybackActions.PLAY)).isPlaying)
+    }
+
+    @Test
+    fun metrolistQueueAddDoesNotChangeCurrentSongOrRestartThePlayhead() {
+        val state = original.copy(lastActionServerTime = 1_000L).applyPlaybackAction(PlaybackActionPayload(
+            action = PlaybackActions.QUEUE_ADD, trackInfo = upcoming, queue = listOf(upcoming), serverTime = 2_000L,
+        ))
+        assertEquals(current, state.currentTrack)
+        assertEquals(original.position, state.position)
+        assertEquals(1_000L, state.lastActionServerTime)
+        assertTrue(state.isPlaying)
+    }
+
+    @Test
+    fun clearingUpcomingTracksDoesNotRestartOrPauseCurrentSong() {
+        val state = original.copy(lastActionServerTime = 1_000L).applyPlaybackAction(PlaybackActionPayload(
+            action = PlaybackActions.QUEUE_CLEAR, serverTime = 2_000L,
+        ))
+        assertEquals(emptyList(), state.queue)
+        assertEquals(current, state.currentTrack)
+        assertEquals(original.position, state.position)
+        assertEquals(1_000L, state.lastActionServerTime)
+        assertTrue(state.isPlaying)
+    }
+
+    @Test
     fun replacingWithUnnamedQueueDoesNotKeepThePreviousPlaylistsTitle() {
         val state = original.applyPlaybackAction(PlaybackActionPayload(
             action = PlaybackActions.SYNC_QUEUE, queue = listOf(current), queueTitle = "",

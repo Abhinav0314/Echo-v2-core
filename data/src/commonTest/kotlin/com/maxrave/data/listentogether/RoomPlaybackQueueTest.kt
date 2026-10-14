@@ -2,6 +2,7 @@ package com.maxrave.data.listentogether
 
 import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.listentogether.ListenTogetherRoom
+import com.maxrave.domain.data.model.listentogether.RoomConnection
 import com.maxrave.domain.data.model.listentogether.RoomTrack
 import com.maxrave.domain.data.model.searchResult.songs.Album
 import com.maxrave.domain.data.model.searchResult.songs.Artist
@@ -92,6 +93,20 @@ class RoomPlaybackQueueTest {
         assertEquals("MUSIC_VIDEO_TYPE_ATV", data.listTracks.first().videoType)
         assertNull(data.listTracks.last().album)
         assertNull(data.listTracks.last().thumbnails)
+    }
+
+    @Test
+    fun bufferReadinessRequiresTheRoomTrackAndCanArriveAfterTheInitialRoomEvent() {
+        val room = ListenTogetherRoom(
+            connection = RoomConnection.Connected("1"), roomCode = "ROOM", selfUserId = "guest",
+            currentTrack = RoomTrack("new-song", "Next", "Artist"), waitingFor = listOf("guest"),
+        )
+        assertFalse(mayReportRoomBufferReady(room, "old-song", 100))
+        assertFalse(mayReportRoomBufferReady(room, "new-song", 0))
+        assertTrue(mayReportRoomBufferReady(room, "new-song", 5))
+        assertFalse(mayReportRoomBufferReady(room.copy(waitingFor = emptyList()), "new-song", 100))
+        assertFalse(mayReportRoomBufferReady(room.copy(roomCode = null), "new-song", 100))
+        assertFalse(mayReportRoomBufferReady(room.copy(connection = RoomConnection.Connecting), "new-song", 100))
     }
 
     private fun track(id: String) = Track(

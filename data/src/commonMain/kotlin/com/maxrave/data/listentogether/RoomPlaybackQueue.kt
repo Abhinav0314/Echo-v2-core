@@ -67,3 +67,9 @@ internal fun mayPublishSettledPlayback(
         currentRoom.roomCode == startedIn.roomCode &&
         currentRoom.selfUserId == startedIn.selfUserId &&
         activeTrackId == expectedTrackId
+
+/** Never answer a new track's buffer barrier using the previous track's buffered percentage. */
+internal fun mayReportRoomBufferReady(room: ListenTogetherRoom, loadedTrackId: String?, bufferedPercentage: Int): Boolean =
+    room.inRoom && room.isConnected && room.selfUserId in room.waitingFor &&
+        room.currentTrack?.id?.let { it.isNotBlank() && it == loadedTrackId } == true &&
+        bufferedPercentage >= 5

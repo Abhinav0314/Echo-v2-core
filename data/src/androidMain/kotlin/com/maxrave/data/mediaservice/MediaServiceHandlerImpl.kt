@@ -1052,7 +1052,7 @@ internal class MediaServiceHandlerImpl(
 
             PlayerEvent.Next -> {
                 resetCrossfade()
-                player.seekToNext()
+                player.skipToNextAndPlay()
             }
 
             PlayerEvent.Previous -> {
