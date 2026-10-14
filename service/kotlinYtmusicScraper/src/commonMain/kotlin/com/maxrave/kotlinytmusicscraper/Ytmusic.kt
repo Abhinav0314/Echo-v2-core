@@ -34,7 +34,6 @@ import com.maxrave.logger.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.ProxyConfig
 import io.ktor.client.plugins.ClientRequestException
-import io.ktor.client.plugins.HttpRedirect
 import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -108,10 +107,7 @@ class Ytmusic {
     private fun getDownloadClient(): HttpClient =
         downloadClient ?: HttpClient(getEngine()) {
             expectSuccess = true
-            install(HttpRedirect) {
-                checkHttpMethod = false
-                allowHttpsDowngrade = true
-            }
+            installSecureYouTubeRedirects()
             // Disable logging for download - significantly improves performance
             // Note: Don't install Logging plugin for download client
         }.also { downloadClient = it }
@@ -182,10 +178,7 @@ class Ytmusic {
                     }
                 }
             }
-            install(HttpRedirect) {
-                checkHttpMethod = false
-                allowHttpsDowngrade = true
-            }
+            installSecureYouTubeRedirects()
             install(Logging) {
                 logger = io.ktor.client.plugins.logging.Logger.DEFAULT
                 level = LogLevel.ALL
@@ -513,7 +506,7 @@ class Ytmusic {
     }
 
     suspend fun getSuggestQuery(query: String) =
-        httpClient.get("http://suggestqueries.google.com/complete/search") {
+        httpClient.get("https://suggestqueries.google.com/complete/search") {
             contentType(ContentType.Application.Json)
             parameter("client", "firefox")
             parameter("ds", "yt")

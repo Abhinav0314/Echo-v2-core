@@ -6,7 +6,7 @@ import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.http.HttpHeaders
 import io.ktor.http.content.OutgoingContent
 import io.ktor.utils.io.ByteChannel
-import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.io.readByteArray
@@ -128,7 +128,7 @@ private suspend fun OutgoingContent.WriteChannelContent.readWriteChannelBody(): 
                     channel.flushAndClose()
                 }
             }
-            channel.readRemaining().readByteArray().decodeToString()
+            channel.readBuffer().readByteArray().decodeToString()
         }
     } catch (e: CancellationException) {
         throw e

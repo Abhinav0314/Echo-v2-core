@@ -16,6 +16,7 @@ import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.player.GenericCommandButton
 import com.maxrave.domain.mediaservice.handler.RepeatState
+import com.maxrave.domain.extension.secureYouTubeArtworkUrl
 import com.maxrave.domain.utils.connectArtists
 import com.maxrave.domain.utils.toListName
 import com.maxrave.media3.R
@@ -60,7 +61,7 @@ fun SongEntity.toMediaItem(): MediaItem {
                 .Builder()
                 .setTitle(this.title)
                 .setArtist(this.artistName?.connectArtists())
-                .setArtworkUri(this.thumbnails?.toUri())
+                .setArtworkUri(this.thumbnails?.secureYouTubeArtworkUrl()?.toUri())
                 .setAlbumTitle(this.albumName)
                 .setDescription(
                     if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
@@ -72,8 +73,8 @@ fun SongEntity.toMediaItem(): MediaItem {
 @UnstableApi
 fun Track.toMediaItem(): MediaItem {
     var thumbUrl =
-        this.thumbnails?.last()?.url
-            ?: "http://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg"
+        this.thumbnails?.last()?.url?.secureYouTubeArtworkUrl()
+            ?: "https://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg"
     if (thumbUrl.contains("w120")) {
         thumbUrl = Regex("([wh])120").replace(thumbUrl, "$1544")
     }

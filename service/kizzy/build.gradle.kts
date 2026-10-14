@@ -7,6 +7,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Echo disables Apple targets by default; another upstream consumer retains them
+// unless it sets echo.enableNativeTargets=false. Opt in with -Pecho.enableNativeTargets=true.
+val echoNativeTargetsEnabled = providers.gradleProperty("echo.enableNativeTargets")
+    .map { it.toBooleanStrict() }.orElse(true).get()
+
 kotlin {
     android {
         namespace = "com.my.kizzy"
@@ -15,15 +20,17 @@ kotlin {
     }
     val xcfName = "kizzyKit"
 
-    iosArm64 {
-        binaries.framework {
-            baseName = xcfName
+    if (echoNativeTargetsEnabled) {
+        iosArm64 {
+            binaries.framework {
+                baseName = xcfName
+            }
         }
-    }
 
-    iosSimulatorArm64 {
-        binaries.framework {
-            baseName = xcfName
+        iosSimulatorArm64 {
+            binaries.framework {
+                baseName = xcfName
+            }
         }
     }
 
@@ -57,8 +64,10 @@ kotlin {
             dependencies {}
         }
 
-        iosMain {
-            dependencies {}
+        if (echoNativeTargetsEnabled) {
+            iosMain {
+                dependencies {}
+            }
         }
 
         jvmMain {

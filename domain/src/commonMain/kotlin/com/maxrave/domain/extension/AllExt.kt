@@ -78,7 +78,7 @@ fun SongEntity.toGenericMediaItem(): GenericMediaItem {
                 title = this.title,
                 artist = this.artistName?.connectArtists(),
                 albumTitle = this.albumName,
-                artworkUri = this.thumbnails,
+                artworkUri = this.thumbnails?.secureYouTubeArtworkUrl(),
                 description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
             ),
         customCacheKey = this.videoId,
@@ -87,8 +87,8 @@ fun SongEntity.toGenericMediaItem(): GenericMediaItem {
 
 fun Track.toGenericMediaItem(): GenericMediaItem {
     var thumbUrl =
-        this.thumbnails?.last()?.url
-            ?: "http://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg"
+        this.thumbnails?.last()?.url?.secureYouTubeArtworkUrl()
+            ?: "https://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg"
     if (thumbUrl.contains("w120")) {
         thumbUrl = Regex("([wh])120").replace(thumbUrl, "$1544")
     }

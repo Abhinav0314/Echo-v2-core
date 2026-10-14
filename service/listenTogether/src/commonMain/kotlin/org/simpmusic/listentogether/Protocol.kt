@@ -13,6 +13,8 @@
  * annotations, so the whole codec lives in commonMain. That equivalence is what MessageCodecTest
  * pins — if it ever drifts, that test fails before a user does.
  */
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package org.simpmusic.listentogether
 
 import kotlinx.serialization.Serializable

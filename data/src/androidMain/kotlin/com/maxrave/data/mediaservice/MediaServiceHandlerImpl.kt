@@ -46,6 +46,7 @@ import com.maxrave.domain.data.player.ReverbEffect
 import com.maxrave.domain.data.player.ReverbPreset
 import com.maxrave.domain.extension.isVideo
 import com.maxrave.domain.extension.now
+import com.maxrave.domain.extension.secureYouTubeArtworkUrl
 import com.maxrave.domain.extension.toGenericMediaItem
 import com.maxrave.domain.extension.toSongEntity
 import com.maxrave.domain.manager.DataStoreManager
@@ -649,8 +650,9 @@ internal class MediaServiceHandlerImpl(
                         var thumbUrl =
                             track?.thumbnails?.lastOrNull()?.url
                                 ?: songEntity.thumbnails
-                                ?: "http://i.ytimg.com/vi/${songEntity.videoId}/maxresdefault.jpg"
+                                ?: "https://i.ytimg.com/vi/${songEntity.videoId}/maxresdefault.jpg"
                         Logger.d(TAG, "getDataOfNowPlayingState before: $thumbUrl")
+                        thumbUrl = thumbUrl.secureYouTubeArtworkUrl()
                         thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
                         Logger.d(TAG, "getDataOfNowPlayingState: $thumbUrl")
                         if (songEntity.thumbnails != thumbUrl) {
@@ -689,8 +691,9 @@ internal class MediaServiceHandlerImpl(
                         _controlState.update { it.copy(isLiked = false) }
                         var thumbUrl =
                             track?.thumbnails?.lastOrNull()?.url
-                                ?: "http://i.ytimg.com/vi/${track?.videoId}/maxresdefault.jpg"
+                                ?: "https://i.ytimg.com/vi/${track?.videoId}/maxresdefault.jpg"
                         Logger.d(TAG, "getDataOfNowPlayingState before: $thumbUrl")
+                        thumbUrl = thumbUrl.secureYouTubeArtworkUrl()
                         thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
                         val songEntity =
                             (track?.toSongEntity() ?: mediaItem.toSongEntity()).copy(
@@ -1826,7 +1829,8 @@ internal class MediaServiceHandlerImpl(
             val track = listTrack[i]
             var thumbUrl =
                 track.thumbnails?.lastOrNull()?.url
-                    ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                    ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+            thumbUrl = thumbUrl.secureYouTubeArtworkUrl()
             thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
             val artistName: String = track.artists.toListName().connectArtists()
             val isSong =
@@ -1970,7 +1974,8 @@ internal class MediaServiceHandlerImpl(
                 if (track == current) continue
                 var thumbUrl =
                     track.thumbnails?.lastOrNull()?.url
-                        ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                        ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                thumbUrl = thumbUrl.secureYouTubeArtworkUrl()
                 thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
                 val isSong =
                     (
@@ -2195,7 +2200,8 @@ internal class MediaServiceHandlerImpl(
         var inserted: Pair<Int, Track>? = null
         var thumbUrl =
             track.thumbnails?.lastOrNull()?.url
-                ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+        thumbUrl = thumbUrl.secureYouTubeArtworkUrl()
         thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
         val artistName: String = track.artists.toListName().connectArtists()
         val isSong =

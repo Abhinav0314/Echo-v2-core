@@ -19,6 +19,11 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Echo disables Apple targets by default; another upstream consumer retains them
+// unless it sets echo.enableNativeTargets=false. Opt in with -Pecho.enableNativeTargets=true.
+val echoNativeTargetsEnabled = providers.gradleProperty("echo.enableNativeTargets")
+    .map { it.toBooleanStrict() }.orElse(true).get()
+
 kotlin {
     jvmToolchain(21)
     // Target declarations - add or remove as needed below. These define
@@ -44,15 +49,17 @@ kotlin {
     // https://developer.android.com/kotlin/multiplatform/migrate
     val xcfName = "dataKit"
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64(),
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = xcfName
-            isStatic = true
-            // Required when using NativeSQLiteDriver
-            linkerOpts.add("-lsqlite3")
+    if (echoNativeTargetsEnabled) {
+        listOf(
+            iosArm64(),
+            iosSimulatorArm64(),
+        ).forEach { iosTarget ->
+            iosTarget.binaries.framework {
+                baseName = xcfName
+                isStatic = true
+                // Required when using NativeSQLiteDriver
+                linkerOpts.add("-lsqlite3")
+            }
         }
     }
 
@@ -121,13 +128,15 @@ kotlin {
             }
         }
 
-        iosMain {
-            dependencies {
-                // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
-                // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
-                // part of KMP’s default source set hierarchy. Note that this source set depends
-                // on common by default and will correctly pull the iOS artifacts of any
-                // KMP dependencies declared in commonMain.
+        if (echoNativeTargetsEnabled) {
+            iosMain {
+                dependencies {
+                    // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
+                    // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
+                    // part of KMP’s default source set hierarchy. Note that this source set depends
+                    // on common by default and will correctly pull the iOS artifacts of any
+                    // KMP dependencies declared in commonMain.
+                }
             }
         }
 
@@ -146,8 +155,10 @@ kotlin {
 
 dependencies {
     add("kspAndroid", libs.room.compiler)
-    add("kspIosSimulatorArm64", libs.room.compiler)
-    add("kspIosArm64", libs.room.compiler)
+    if (echoNativeTargetsEnabled) {
+        add("kspIosSimulatorArm64", libs.room.compiler)
+        add("kspIosArm64", libs.room.compiler)
+    }
     add("kspJvm", libs.room.compiler)
 }
 

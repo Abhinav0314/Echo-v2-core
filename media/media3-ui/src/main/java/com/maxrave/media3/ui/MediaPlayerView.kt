@@ -438,7 +438,7 @@ fun MediaPlayerViewWithSubtitle(
 
                             // Add autoEnterEnabled for versions S and up
                             builder.setAutoEnterEnabled(shouldEnterPipMode)
-                            activity?.setPictureInPictureParams(builder.build())
+                            activity.setPictureInPictureParams(builder.build())
                         }
                     } else {
                         Modifier

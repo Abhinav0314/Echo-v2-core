@@ -21,6 +21,7 @@ import com.maxrave.domain.data.model.searchResult.songs.Artist
 import com.maxrave.domain.data.model.searchResult.songs.SongsResult
 import com.maxrave.domain.data.model.searchResult.songs.Thumbnail
 import com.maxrave.domain.data.model.searchResult.videos.VideosResult
+import com.maxrave.domain.extension.secureYouTubeArtworkUrl
 import kotlin.jvm.JvmName
 
 fun SearchHistory.toQuery(): String = this.query
@@ -107,7 +108,7 @@ fun Track.toSongEntity(): SongEntity {
         isExplicit = this.isExplicit,
         likeStatus = this.likeStatus ?: "",
         thumbnails =
-            this.thumbnails?.last()?.url?.let {
+            this.thumbnails?.last()?.url?.secureYouTubeArtworkUrl()?.let {
                 if (it.contains("w120")) {
                     return@let Regex("([wh])120").replace(it, "$1544")
                 } else if (it.contains("sddefault")) {
@@ -134,7 +135,8 @@ fun SongEntity.toTrack(): Track {
             listArtist.add(Artist(this.artistId?.getOrNull(i) ?: "", artistName[i]))
         }
     }
-    val isSong = (this.thumbnails?.contains("w544") == true && this.thumbnails?.contains("h544") == true)
+    val thumbnailUrl = this.thumbnails.orEmpty().secureYouTubeArtworkUrl()
+    val isSong = thumbnailUrl.contains("w544") && thumbnailUrl.contains("h544")
     return Track(
         album = this.albumId?.let { this.albumName?.let { it1 -> Album(it, it1) } },
         artists = listArtist,
@@ -143,7 +145,7 @@ fun SongEntity.toTrack(): Track {
         isAvailable = this.isAvailable,
         isExplicit = this.isExplicit,
         likeStatus = this.likeStatus,
-        thumbnails = if (isSong) listOf(Thumbnail(544, this.thumbnails ?: "", 544)) else listOf(Thumbnail(720, this.thumbnails ?: "", 1080)),
+        thumbnails = if (isSong) listOf(Thumbnail(544, thumbnailUrl, 544)) else listOf(Thumbnail(720, thumbnailUrl, 1080)),
         title = this.title,
         videoId = this.videoId,
         videoType = this.videoType,
@@ -174,7 +176,7 @@ fun ArrayList<SongsResult>.toListTrack(): ArrayList<Track> {
 }
 
 fun VideosResult.toTrack(): Track {
-    val thumb = Thumbnail(720, "http://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg", 1280)
+    val thumb = Thumbnail(720, "https://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg", 1280)
     val thumbList = this.thumbnails ?: mutableListOf(thumb)
     return Track(
         album = null,

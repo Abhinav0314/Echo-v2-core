@@ -50,14 +50,14 @@ internal fun parseChart(data: SectionListRenderer?): Chart? {
                 contents.mapNotNull { contentItem ->
                     val item = contentItem.musicTwoRowItemRenderer ?: return@mapNotNull null
                     ResultPlaylist(
-                        id = item.navigationEndpoint?.browseEndpoint?.browseId ?: return@mapNotNull null,
+                        id = item.navigationEndpoint.browseEndpoint?.browseId ?: return@mapNotNull null,
                         thumbnails =
                             item.thumbnailRenderer
-                                ?.musicThumbnailRenderer
+                                .musicThumbnailRenderer
                                 ?.thumbnail
                                 ?.thumbnails
                                 ?.toListThumbnail() ?: emptyList(),
-                        title = item.title?.runs?.firstOrNull()?.text ?: "",
+                        title = item.title.runs?.firstOrNull()?.text ?: "",
                         author = item.subtitle?.runs?.joinToString(separator = " ") { it.text } ?: "",
                     )
                 }

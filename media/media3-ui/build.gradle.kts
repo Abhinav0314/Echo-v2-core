@@ -51,6 +51,9 @@ dependencies {
     implementation(composeBom)
     implementation(libs.compose.material3.lib)
     implementation(libs.compose.ui)
+    // This module directly uses runtime effects and Foundation layouts/Crossfade.
+    implementation(libs.runtime)
+    implementation(libs.foundation)
 
     implementation(project(":common"))
     implementation(project(":domain"))

@@ -246,14 +246,14 @@ data class RelatedPage(
 
                 renderer.isArtist -> {
                     ArtistItem(
-                        id = renderer.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
+                        id = renderer.navigationEndpoint.browseEndpoint?.browseId ?: return null,
                         title =
                             renderer.title
-                                ?.runs
+                                .runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
                         thumbnail =
-                            renderer.thumbnailRenderer?.musicThumbnailRenderer?.getThumbnailUrl()
+                            renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl()
                                 ?: return null,
                         shuffleEndpoint =
                             renderer.menu
@@ -279,14 +279,14 @@ data class RelatedPage(
                 renderer.isUserChannel -> {
                     // User channels have no shuffle/radio; surface them as an artist card.
                     ArtistItem(
-                        id = renderer.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
+                        id = renderer.navigationEndpoint.browseEndpoint?.browseId ?: return null,
                         title =
                             renderer.title
-                                ?.runs
+                                .runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
                         thumbnail =
-                            renderer.thumbnailRenderer?.musicThumbnailRenderer?.getThumbnailUrl()
+                            renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl()
                                 ?: return null,
                         shuffleEndpoint = null,
                         radioEndpoint = null,

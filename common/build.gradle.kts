@@ -6,6 +6,11 @@ plugins {
     alias(libs.plugins.android.lint)
 }
 
+// Echo disables Apple targets by default; another upstream consumer retains them
+// unless it sets echo.enableNativeTargets=false. Opt in with -Pecho.enableNativeTargets=true.
+val echoNativeTargetsEnabled = providers.gradleProperty("echo.enableNativeTargets")
+    .map { it.toBooleanStrict() }.orElse(true).get()
+
 kotlin {
     jvmToolchain(21)
     // Target declarations - add or remove as needed below. These define
@@ -16,6 +21,11 @@ kotlin {
         compileSdk = 37
         minSdk = 26
         withHostTest {}
+        // Keep the checked-in Android instrumentation test as a real, runnable target.
+        withDeviceTest {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+            execution = "HOST"
+        }
     }
 
     // For iOS targets, this is also where you should
@@ -27,15 +37,17 @@ kotlin {
     // https://developer.android.com/kotlin/multiplatform/migrate
     val xcfName = "commonKit"
 
-    iosArm64 {
-        binaries.framework {
-            baseName = xcfName
+    if (echoNativeTargetsEnabled) {
+        iosArm64 {
+            binaries.framework {
+                baseName = xcfName
+            }
         }
-    }
 
-    iosSimulatorArm64 {
-        binaries.framework {
-            baseName = xcfName
+        iosSimulatorArm64 {
+            binaries.framework {
+                baseName = xcfName
+            }
         }
     }
 
@@ -66,6 +78,13 @@ kotlin {
             }
         }
 
+        getByName("androidDeviceTest") {
+            dependencies {
+                implementation(libs.androidx.junit)
+                implementation(libs.espresso.core)
+            }
+        }
+
         androidMain {
             dependencies {
                 // Add Android-specific dependencies here. Note that this source set depends on
@@ -74,13 +93,15 @@ kotlin {
             }
         }
 
-        iosMain {
-            dependencies {
-                // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
-                // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
-                // part of KMP’s default source set hierarchy. Note that this source set depends
-                // on common by default and will correctly pull the iOS artifacts of any
-                // KMP dependencies declared in commonMain.
+        if (echoNativeTargetsEnabled) {
+            iosMain {
+                dependencies {
+                    // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
+                    // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
+                    // part of KMP’s default source set hierarchy. Note that this source set depends
+                    // on common by default and will correctly pull the iOS artifacts of any
+                    // KMP dependencies declared in commonMain.
+                }
             }
         }
 

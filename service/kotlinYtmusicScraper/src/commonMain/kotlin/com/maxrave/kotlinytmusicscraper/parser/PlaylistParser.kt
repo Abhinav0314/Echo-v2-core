@@ -321,13 +321,14 @@ fun MusicShelfRenderer.Content.toPlaylistItemData(): MusicResponsiveListItemRend
     this.musicResponsiveListItemRenderer?.playlistItemData
 
 fun MusicShelfRenderer.Content.toSongItem(): SongItem? {
-    val flexColumns = this.musicResponsiveListItemRenderer?.flexColumns
-    val fixedColumns = this.musicResponsiveListItemRenderer?.fixedColumns
-    val menu = this.musicResponsiveListItemRenderer?.menu
+    val renderer = musicResponsiveListItemRenderer ?: return null
+    val flexColumns = renderer.flexColumns
+    val fixedColumns = renderer.fixedColumns
+    val menu = renderer.menu
     return SongItem(
         id =
             flexColumns
-                ?.firstOrNull()
+                .firstOrNull()
                 ?.musicResponsiveListItemFlexColumnRenderer
                 ?.text
                 ?.runs
@@ -384,8 +385,8 @@ fun MusicShelfRenderer.Content.toSongItem(): SongItem? {
                 ?.text
                 .toDurationSeconds(),
         thumbnail =
-            this.musicResponsiveListItemRenderer
-                ?.thumbnail
+            renderer
+                .thumbnail
                 ?.musicThumbnailRenderer
                 ?.getThumbnailUrl() ?: "",
         endpoint =
@@ -398,12 +399,12 @@ fun MusicShelfRenderer.Content.toSongItem(): SongItem? {
                 ?.navigationEndpoint
                 ?.watchEndpoint,
         explicit =
-            this.musicResponsiveListItemRenderer?.badges?.toSongBadges()?.contains(
+            renderer.badges?.toSongBadges()?.contains(
                 SongItem.SongBadges.Explicit,
             ) ?: false,
         thumbnails =
-            this.musicResponsiveListItemRenderer
-                ?.thumbnail
+            renderer
+                .thumbnail
                 ?.musicThumbnailRenderer
                 ?.thumbnail,
         likeStatus =
@@ -414,8 +415,8 @@ fun MusicShelfRenderer.Content.toSongItem(): SongItem? {
                 ?.likeButtonRenderer
                 ?.toLikeStatus()
                 ?: LikeStatus.INDIFFERENT,
-        badges = this.musicResponsiveListItemRenderer?.badges?.toSongBadges(),
-        musicVideoType = this.musicResponsiveListItemRenderer?.musicVideoType,
+        badges = renderer.badges?.toSongBadges(),
+        musicVideoType = renderer.musicVideoType,
     )
 }
 

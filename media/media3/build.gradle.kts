@@ -61,7 +61,9 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.koin.android)
 
-    implementation(libs.coil.compose)
+    // Service artwork uses ImageLoader/bitmap APIs, never Compose UI. Pulling coil-compose
+    // here made this service rely on the app's runtime graph to choose Compose versions.
+    implementation(libs.coil)
     implementation(libs.coil.network.okhttp)
 
     // Media3
@@ -75,6 +77,7 @@ dependencies {
     implementation(libs.media3.datasource.okhttp)
     implementation(libs.okhttp3.logging.interceptor)
     implementation(libs.coroutines.guava)
+    implementation(libs.coroutines.android)
 
     // Android Auto (Car App Library media templates)
     implementation(libs.car.app.core)

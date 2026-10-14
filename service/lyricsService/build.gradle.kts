@@ -7,7 +7,17 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Echo disables Apple targets by default; another upstream consumer retains them
+// unless it sets echo.enableNativeTargets=false. Opt in with -Pecho.enableNativeTargets=true.
+val echoNativeTargetsEnabled = providers.gradleProperty("echo.enableNativeTargets")
+    .map { it.toBooleanStrict() }.orElse(true).get()
+
 kotlin {
+    compilerOptions {
+        // These platform-backed romanization objects intentionally use Kotlin
+        // expect/actual classes. Explicitly opt in to that language feature.
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
     // Target declarations - add or remove as needed below. These define
     // which platforms this KMP module supports.
     // See: https://kotlinlang.org/docs/multiplatform-discover-project.html#targets
@@ -26,15 +36,17 @@ kotlin {
     // https://developer.android.com/kotlin/multiplatform/migrate
     val xcfName = "lyricsServiceKit"
 
-    iosArm64 {
-        binaries.framework {
-            baseName = xcfName
+    if (echoNativeTargetsEnabled) {
+        iosArm64 {
+            binaries.framework {
+                baseName = xcfName
+            }
         }
-    }
 
-    iosSimulatorArm64 {
-        binaries.framework {
-            baseName = xcfName
+        iosSimulatorArm64 {
+            binaries.framework {
+                baseName = xcfName
+            }
         }
     }
 
@@ -92,13 +104,15 @@ kotlin {
             }
         }
 
-        iosMain {
-            dependencies {
-                // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
-                // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
-                // part of KMP’s default source set hierarchy. Note that this source set depends
-                // on common by default and will correctly pull the iOS artifacts of any
-                // KMP dependencies declared in commonMain.
+        if (echoNativeTargetsEnabled) {
+            iosMain {
+                dependencies {
+                    // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
+                    // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
+                    // part of KMP’s default source set hierarchy. Note that this source set depends
+                    // on common by default and will correctly pull the iOS artifacts of any
+                    // KMP dependencies declared in commonMain.
+                }
             }
         }
 
