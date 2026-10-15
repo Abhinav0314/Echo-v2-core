@@ -90,9 +90,9 @@ class AiClient {
             Result.failure(e)
         } catch (e: OpenAIAPIException) {
             val kind = if (e.statusCode in REJECTED_STATUS) TasteException.Kind.REJECTED else TasteException.Kind.TEMPORARY
-            Result.failure(TasteException(kind, e.statusCode, e.error.detail?.message ?: e.message, e))
+            Result.failure(TasteException(kind, e.statusCode, e))
         } catch (e: Exception) {
-            Result.failure(TasteException(TasteException.Kind.TEMPORARY, message = e.message, cause = e))
+            Result.failure(TasteException(TasteException.Kind.TEMPORARY, cause = e))
         }
     }
 

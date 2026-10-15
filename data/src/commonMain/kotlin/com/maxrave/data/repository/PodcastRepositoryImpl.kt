@@ -158,7 +158,7 @@ internal class PodcastRepositoryImpl(
                                             ?.nextContinuationData
                                             ?.continuation
                                 }.onFailure {
-                                    it.printStackTrace()
+                                    Logger.e("Repository", "Request failed")
                                     continueParam = null
                                 }
                         }
@@ -176,11 +176,11 @@ internal class PodcastRepositoryImpl(
                                 ),
                             )
                         } else {
-                            emit(Resource.Error<PodcastBrowse>("Error"))
+                            emit(Resource.Error<PodcastBrowse>("Couldn't load this podcast. Please try again."))
                         }
                     }.onFailure { error ->
-                        Logger.w("Podcast", "Error: ${error.message}")
-                        emit(Resource.Error<PodcastBrowse>(error.message.toString()))
+                        Logger.w("Podcast", "Request failed")
+                        emit(Resource.Error<PodcastBrowse>("Couldn't load this podcast. Please try again."))
                     }
             }
         }

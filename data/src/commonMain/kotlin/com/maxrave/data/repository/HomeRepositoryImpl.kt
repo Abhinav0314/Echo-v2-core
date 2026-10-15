@@ -198,14 +198,14 @@ internal class HomeRepositoryImpl(
 //                                    count++
 //                                    Logger.d("Repository", "count: $count")
 //                                }.onFailure {
-//                                    Logger.e("Repository", "Error: ${it.message}")
+//                                    Logger.e("Repository", "Request failed")
 //                                    count++
 //                                }
 //                        }
                         Logger.d("Repository", "List size: ${list.size}")
                         emit(Resource.Success(continueParam to list.toList()))
                     }.onFailure { error ->
-                        emit(Resource.Error<Pair<String?, List<HomeItem>>>(error.message.toString()))
+                        emit(Resource.Error<Pair<String?, List<HomeItem>>>("Couldn't load this page. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -237,7 +237,7 @@ internal class HomeRepositoryImpl(
                     )
                 emit(Resource.Success(newContinueParam to list))
             }.onFailure {
-                emit(Resource.Error<Pair<String?, List<HomeItem>>>(it.message.toString()))
+                emit(Resource.Error<Pair<String?, List<HomeItem>>>("Couldn't load this page. Check your connection and try again."))
             }
     }.flowOn(Dispatchers.IO)
 
@@ -251,7 +251,7 @@ internal class HomeRepositoryImpl(
                 .onSuccess { result ->
                     emit(Resource.Success<List<HomeItem>>(parseNewRelease(result, newReleaseString, musicVideoString)))
                 }.onFailure { error ->
-                    emit(Resource.Error<List<HomeItem>>(error.message.toString()))
+                    emit(Resource.Error<List<HomeItem>>("Couldn't load this page. Check your connection and try again."))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -274,10 +274,10 @@ internal class HomeRepositoryImpl(
                         if (chart != null) {
                             emit(Resource.Success<Chart>(chart))
                         } else {
-                            emit(Resource.Error<Chart>("Error"))
+                            emit(Resource.Error<Chart>("Couldn't load this page. Please try again."))
                         }
                     }.onFailure { error ->
-                        emit(Resource.Error<Chart>(error.message.toString()))
+                        emit(Resource.Error<Chart>("Couldn't load this page. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -322,7 +322,7 @@ internal class HomeRepositoryImpl(
                         // Already showing the cached copy — surfacing an error over it would
                         // replace working content with an error state.
                         if (cached == null) {
-                            emit(Resource.Error<Mood>(e.message.toString()))
+                            emit(Resource.Error<Mood>("Couldn't load this page. Check your connection and try again."))
                         }
                     }
             }
@@ -376,10 +376,10 @@ internal class HomeRepositoryImpl(
                         if (data != null) {
                             emit(Resource.Success<MoodsMomentObject>(data))
                         } else {
-                            emit(Resource.Error<MoodsMomentObject>("Error"))
+                            emit(Resource.Error<MoodsMomentObject>("Couldn't load this page. Please try again."))
                         }
                     }.onFailure { e ->
-                        emit(Resource.Error<MoodsMomentObject>(e.message.toString()))
+                        emit(Resource.Error<MoodsMomentObject>("Couldn't load this page. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -396,10 +396,10 @@ internal class HomeRepositoryImpl(
                         if (data != null) {
                             emit(Resource.Success<GenreObject>(data))
                         } else {
-                            emit(Resource.Error<GenreObject>("Error"))
+                            emit(Resource.Error<GenreObject>("Couldn't load this page. Please try again."))
                         }
                     }.onFailure { e ->
-                        emit(Resource.Error<GenreObject>(e.message.toString()))
+                        emit(Resource.Error<GenreObject>("Couldn't load this page. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -433,7 +433,7 @@ internal class HomeRepositoryImpl(
                         ),
                     )
                 }.onFailure { e ->
-                    emit(Resource.Error<BrowsePage>(e.message.toString()))
+                    emit(Resource.Error<BrowsePage>("Couldn't load this page. Check your connection and try again."))
                 }
         }.flowOn(Dispatchers.IO)
 }

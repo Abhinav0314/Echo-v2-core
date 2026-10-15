@@ -1,6 +1,8 @@
 package com.maxrave.domain.utils
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -62,7 +64,7 @@ suspend fun <T> Flow<LocalResource<T>>.collectResource(
 ) = this.collect { resource ->
     when (resource) {
         is LocalResource.Success -> onSuccess(resource.data)
-        is LocalResource.Error -> onError(resource.message ?: "Error in collectResource")
+        is LocalResource.Error -> onError(resource.message ?: "Something went wrong. Please try again.")
         is LocalResource.Loading -> onLoading()
     }
 }
@@ -74,7 +76,7 @@ suspend fun Flow<NoResponseResource>.collectNoResponseResource(
 ) = this.collect { resource ->
     when (resource) {
         is NoResponseResource.Success -> onSuccess()
-        is NoResponseResource.Error -> onError(resource.message ?: "Error in collectNoResponseResource")
+        is NoResponseResource.Error -> onError(resource.message ?: "Something went wrong. Please try again.")
         is NoResponseResource.Loading -> onLoading()
     }
 }
@@ -86,7 +88,7 @@ suspend fun <T> Flow<LocalResource<T>>.collectLatestResource(
 ) = this.collectLatest { resource ->
     when (resource) {
         is LocalResource.Success -> onSuccess(resource.data)
-        is LocalResource.Error -> onError(resource.message ?: "Error in collectLatestResource")
+        is LocalResource.Error -> onError(resource.message ?: "Something went wrong. Please try again.")
         is LocalResource.Loading -> onLoading()
     }
 }
@@ -98,7 +100,7 @@ suspend fun Flow<NoResponseResource>.collectLatestNoResponseResource(
 ) = this.collectLatest { resource ->
     when (resource) {
         is NoResponseResource.Success -> onSuccess()
-        is NoResponseResource.Error -> onError(resource.message ?: "Error in collectLatestNoResponseResource")
+        is NoResponseResource.Error -> onError(resource.message ?: "Something went wrong. Please try again.")
         is NoResponseResource.Loading -> onLoading()
     }
 }
@@ -114,7 +116,8 @@ fun wrapMessageResource(
             .onSuccess {
                 emit(LocalResource.Success(successMessage))
             }.onFailure {
-                emit(LocalResource.Error<String>(it.message ?: "Error in wrapBooleanResource"))
+                if (it is CancellationException && it !is TimeoutCancellationException) throw it
+                emit(LocalResource.Error<String>(userErrorMessage(it)))
             }
     }.flowOn(dispatcher)
 
@@ -128,7 +131,8 @@ fun <T> wrapDataResource(
             .onSuccess {
                 emit(LocalResource.Success(it))
             }.onFailure {
-                emit(LocalResource.Error<T>(it.message ?: "Error in wrapDataResource"))
+                if (it is CancellationException && it !is TimeoutCancellationException) throw it
+                emit(LocalResource.Error<T>(userErrorMessage(it)))
             }
     }.flowOn(dispatcher)
 
@@ -144,7 +148,8 @@ fun <T> wrapResultResource(
             .onSuccess {
                 emit(LocalResource.Success(it))
             }.onFailure {
-                emit(LocalResource.Error<T>(it.message ?: "Error in wrapResultResource"))
+                if (it is CancellationException && it !is TimeoutCancellationException) throw it
+                emit(LocalResource.Error<T>(userErrorMessage(it)))
             }
     }.flowOn(dispatcher)
 

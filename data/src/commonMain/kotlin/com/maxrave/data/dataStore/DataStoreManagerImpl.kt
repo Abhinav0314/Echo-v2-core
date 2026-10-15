@@ -36,6 +36,7 @@ import com.maxrave.common.QUALITY as COMMON_QUALITY
 
 internal class DataStoreManagerImpl(
     private val settingsDataStore: DataStore<Preferences>,
+    private val communityLyricsEnabled: Boolean = true,
 ) : DataStoreManager {
     override val appVersion: Flow<String> =
         settingsDataStore.data.map { preferences ->
@@ -482,7 +483,7 @@ internal class DataStoreManagerImpl(
 
     override val lyricsProvider =
         settingsDataStore.data.map { preferences ->
-            preferences[LYRICS_PROVIDER] ?: SIMPMUSIC
+            effectiveLyricsProvider(preferences[LYRICS_PROVIDER], communityLyricsEnabled)
         }
 
     override suspend fun setLyricsProvider(provider: String) {

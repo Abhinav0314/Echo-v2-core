@@ -106,8 +106,8 @@ internal class LyricsCanvasRepositoryImpl(
                             ),
                         )
                     }.onFailure { e ->
-                        Logger.d("Lyrics", "Error: ${e.message}")
-                        emit(Resource.Error<Pair<Lyrics, Lyrics?>>(e.message.toString()))
+                        Logger.d("Lyrics", "Request failed")
+                        emit(Resource.Error<Pair<Lyrics, Lyrics?>>("Couldn't load lyrics or artwork. Please try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -157,8 +157,8 @@ internal class LyricsCanvasRepositoryImpl(
                                 dataStoreManager.setSpotifyClientToken(it.grantedToken.token)
                                 spotifyClientToken = it.grantedToken.token
                             }.onFailure {
-                                it.printStackTrace()
-                                emit(Resource.Error<CanvasResult>(it.message ?: "Not found"))
+                                Logger.e("Repository", "Request failed")
+                                emit(Resource.Error<CanvasResult>("Couldn't load lyrics or artwork. Please try again."))
                             }
                         spotify
                             .getPersonalTokenWithTotp(dataStoreManager.spdc.first())
@@ -169,8 +169,8 @@ internal class LyricsCanvasRepositoryImpl(
                                     it.accessTokenExpirationTimestampMs,
                                 )
                             }.onFailure {
-                                it.printStackTrace()
-                                emit(Resource.Error<CanvasResult>(it.message ?: "Not found"))
+                                Logger.e("Repository", "Request failed")
+                                emit(Resource.Error<CanvasResult>("Couldn't load lyrics or artwork. Please try again."))
                             }
                     }
                     if (spotifyPersonalToken.isNotEmpty() && spotifyClientToken.isNotEmpty()) {
@@ -222,16 +222,16 @@ internal class LyricsCanvasRepositoryImpl(
                                                 emit(Resource.Error<CanvasResult>("Not found"))
                                             }
                                         }.onFailure {
-                                            Logger.e("Canvas", "Error: ${it.message}")
-                                            it.printStackTrace()
-                                            emit(Resource.Error<CanvasResult>(it.message ?: "Not found"))
+                                            Logger.e("Canvas", "Request failed")
+                                            Logger.e("Repository", "Request failed")
+                                            emit(Resource.Error<CanvasResult>("Couldn't load lyrics or artwork. Please try again."))
                                         }
                                 } else {
                                     emit(Resource.Error<CanvasResult>("Not found"))
                                 }
                             }.onFailure { throwable ->
-                                throwable.printStackTrace()
-                                emit(Resource.Error<CanvasResult>(throwable.message ?: "Not found"))
+                                Logger.e("Repository", "Request failed")
+                                emit(Resource.Error<CanvasResult>("Couldn't load lyrics or artwork. Please try again."))
                             }
                     } else {
                         emit(Resource.Error<CanvasResult>("Not found"))
@@ -297,7 +297,7 @@ internal class LyricsCanvasRepositoryImpl(
                     albumName?.let { name ->
                         simpMusicLyrics
                             .searchAMAlbum("$name $artist".cleanForSearch(), limit = AM_SEARCH_LIMIT)
-                            .onFailure { Logger.e(AM_ARTWORK_TAG, "album search failed: ${it.message}") }
+                            .onFailure { Logger.e(AM_ARTWORK_TAG, "Request failed") }
                             .getOrNull()
                             ?.pickAlbumMatch(name, artist)
                     }
@@ -309,7 +309,7 @@ internal class LyricsCanvasRepositoryImpl(
                 val album =
                     byAlbum ?: simpMusicLyrics
                         .searchAMSongsWithAlbums("${song.title} $artist".cleanForSearch(), limit = AM_SEARCH_LIMIT)
-                        .onFailure { Logger.e(AM_ARTWORK_TAG, "song search failed: ${it.message}") }
+                        .onFailure { Logger.e(AM_ARTWORK_TAG, "Request failed") }
                         .getOrNull()
                         ?.pickSongMatch(
                             title = song.title,
@@ -432,7 +432,7 @@ internal class LyricsCanvasRepositoryImpl(
                                 dataStoreManager.setSpotifyClientToken(it.grantedToken.token)
                                 spotifyClientToken = it.grantedToken.token
                             }.onFailure {
-                                it.printStackTrace()
+                                Logger.e("Repository", "Request failed")
                                 emit(Resource.Error<Lyrics>("Not found"))
                             }
                     }
@@ -446,7 +446,7 @@ internal class LyricsCanvasRepositoryImpl(
                                     it.accessTokenExpirationTimestampMs,
                                 )
                             }.onFailure {
-                                it.printStackTrace()
+                                Logger.e("Repository", "Request failed")
                                 emit(Resource.Error<Lyrics>("Not found"))
                             }
                     }
@@ -491,14 +491,14 @@ internal class LyricsCanvasRepositoryImpl(
                                     .onSuccess {
                                         emit(Resource.Success<Lyrics>(it.toLyrics()))
                                     }.onFailure {
-                                        it.printStackTrace()
+                                        Logger.e("Repository", "Request failed")
                                         emit(Resource.Error<Lyrics>("Not found"))
                                     }
                             } else {
                                 emit(Resource.Error<Lyrics>("Not found"))
                             }
                         }.onFailure { throwable ->
-                            throwable.printStackTrace()
+                            Logger.e("Repository", "Request failed")
                             emit(Resource.Error<Lyrics>("Not found"))
                         }
                 }
@@ -577,7 +577,7 @@ internal class LyricsCanvasRepositoryImpl(
                     val lyrics = parseTtmlLyrics(ttml).toLyrics()
                     emit(Resource.Success(lyrics))
                 }.onFailure {
-                    it.printStackTrace()
+                    Logger.e("Repository", "Request failed")
                     emit(Resource.Error<Lyrics>("BetterLyrics search failed"))
                 }
         }.flowOn(Dispatchers.IO)
@@ -624,10 +624,10 @@ internal class LyricsCanvasRepositoryImpl(
                             // genuinely has nothing, and that is worth remembering.
                             emit(Resource.Success(ArtistEditorial(logo = artistLogo, motion = motion)))
                         }.onFailure {
-                            emit(Resource.Error<ArtistEditorial>(it.message ?: "Failed to fetch artist"))
+                            emit(Resource.Error<ArtistEditorial>("Failed to fetch artist"))
                         }
                 }.onFailure {
-                    emit(Resource.Error<ArtistEditorial>(it.message ?: "Artist search failed"))
+                    emit(Resource.Error<ArtistEditorial>("Artist search failed"))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -671,7 +671,7 @@ internal class LyricsCanvasRepositoryImpl(
                         Logger.d("AI Translation", "translated ${translatedLyrics.lines?.size ?: 0} lines")
                         emit(Resource.Success(translatedLyrics))
                     }.onFailure { throwable ->
-                        Logger.e("AI Translation", "Error: ${throwable.message}")
+                        Logger.e("AI Translation", "Request failed")
                         emit(Resource.Error<Lyrics>("Translation failed"))
                     }
             }
@@ -685,7 +685,9 @@ internal class LyricsCanvasRepositoryImpl(
         what: String,
         error: Throwable,
     ) {
-        val message = "$what: ${error.message}"
+        if (error is org.simpmusic.lyrics.LyricsProviderDisabledException) return
+        val code = (error as? SimpMusicLyricsApiException)?.code
+        val message = "$what: provider request failed" + (code?.let { " (http_status=$it)" } ?: "")
         if ((error as? SimpMusicLyricsApiException)?.code == 404) {
             Logger.d(simpMusicLyricsTag, message)
         } else {
@@ -725,7 +727,7 @@ internal class LyricsCanvasRepositoryImpl(
                     )
                 }.onFailure {
                     logSimpMusicLyricsFailure("Get Lyrics Error", it)
-                    emit(Resource.Error<Lyrics>(it.message ?: "Failed to get lyrics"))
+                    emit(Resource.Error<Lyrics>("Failed to get lyrics"))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -753,7 +755,7 @@ internal class LyricsCanvasRepositoryImpl(
                     )
                 }.onFailure {
                     logSimpMusicLyricsFailure("Get Translated Lyrics Error", it)
-                    emit(Resource.Error<Lyrics>(it.message ?: "Failed to get translated lyrics"))
+                    emit(Resource.Error<Lyrics>("Failed to get translated lyrics"))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -768,8 +770,8 @@ internal class LyricsCanvasRepositoryImpl(
                     Logger.d(simpMusicLyricsTag, "Vote Lyrics Success: $it")
                     emit(Resource.Success(it.id))
                 }.onFailure {
-                    Logger.e(simpMusicLyricsTag, "Vote Lyrics Error: ${it.message}")
-                    emit(Resource.Error<String>(it.message ?: "Failed to vote lyrics"))
+                    Logger.e(simpMusicLyricsTag, "Request failed")
+                    emit(Resource.Error<String>("Failed to vote lyrics"))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -784,8 +786,8 @@ internal class LyricsCanvasRepositoryImpl(
                     Logger.d(simpMusicLyricsTag, "Vote Translated Lyrics Success: $it")
                     emit(Resource.Success(it.id))
                 }.onFailure {
-                    Logger.e(simpMusicLyricsTag, "Vote Translated Lyrics Error: ${it.message}")
-                    emit(Resource.Error<String>(it.message ?: "Failed to vote translated lyrics"))
+                    Logger.e(simpMusicLyricsTag, "Request failed")
+                    emit(Resource.Error<String>("Failed to vote translated lyrics"))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -836,8 +838,8 @@ internal class LyricsCanvasRepositoryImpl(
                     Logger.d(simpMusicLyricsTag, "Inserted Lyrics: $it")
                     emit(Resource.Success(it.id))
                 }.onFailure {
-                    Logger.e(simpMusicLyricsTag, "Insert Lyrics Error: ${it.message}")
-                    emit(Resource.Error<String>(it.message ?: "Failed to insert lyrics"))
+                    Logger.e(simpMusicLyricsTag, "Request failed")
+                    emit(Resource.Error<String>("Failed to insert lyrics"))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -869,8 +871,8 @@ internal class LyricsCanvasRepositoryImpl(
                     Logger.d(simpMusicLyricsTag, "Inserted Translated Lyrics: $it")
                     emit(Resource.Success(it.id))
                 }.onFailure {
-                    Logger.e(simpMusicLyricsTag, "Insert Translated Lyrics Error: ${it.message}")
-                    emit(Resource.Error<String>(it.message ?: "Failed to insert translated lyrics"))
+                    Logger.e(simpMusicLyricsTag, "Request failed")
+                    emit(Resource.Error<String>("Failed to insert translated lyrics"))
                 }
         }.flowOn(Dispatchers.IO)
 }

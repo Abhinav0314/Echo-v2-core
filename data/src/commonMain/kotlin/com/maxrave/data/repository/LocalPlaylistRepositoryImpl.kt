@@ -233,11 +233,11 @@ internal class LocalPlaylistRepositoryImpl(
                         .onSuccess {
                             emit(LocalResource.Success(updatedYtMessage))
                         }.onFailure {
-                            emit(LocalResource.Error<String>(it.message ?: errorMessage))
+                            emit(LocalResource.Error<String>(errorMessage))
                         }
                 }
             }.onFailure {
-                emit(LocalResource.Error<String>(it.message ?: errorMessage))
+                emit(LocalResource.Error<String>(errorMessage))
             }
         }.flowOn(Dispatchers.IO)
 
@@ -260,7 +260,7 @@ internal class LocalPlaylistRepositoryImpl(
                 emit(LocalResource.Error<String>(youTubeError))
             }
         }.onFailure {
-            emit(LocalResource.Error<String>(it.message ?: "Error updating playlist thumbnail"))
+            emit(LocalResource.Error<String>("Couldn't update this playlist. Please try again."))
         }
     }.flowOn(Dispatchers.IO)
 
@@ -344,11 +344,11 @@ internal class LocalPlaylistRepositoryImpl(
                             }.onFailure { continueParam = null }
                     }
                     if (listContent.isEmpty()) {
-                        emit(LocalResource.Error("Can't get setVideoId"))
+                        emit(LocalResource.Error("Couldn't sync this playlist with YouTube. Please try again."))
                     }
                     val parsed = parseSetVideoId(ytPlaylistId, listContent)
                     if (parsed.isEmpty()) {
-                        emit(LocalResource.Error("Can't get setVideoId"))
+                        emit(LocalResource.Error("Couldn't sync this playlist with YouTube. Please try again."))
                     }
                     parsed.forEach { setVideoId ->
                         localDataSource.insertSetVideoId(setVideoId)
@@ -359,7 +359,7 @@ internal class LocalPlaylistRepositoryImpl(
                     )
                     emit(LocalResource.Success(successMessage))
                 }.onFailure {
-                    emit(LocalResource.Error("Can't get setVideoId"))
+                    emit(LocalResource.Error("Couldn't sync this playlist with YouTube. Please try again."))
                 }
         }.flowOn(
             Dispatchers.IO,
@@ -425,12 +425,12 @@ internal class LocalPlaylistRepositoryImpl(
                     Logger.d(TAG, "syncLocalPlaylistToYouTubePlaylist: $ytId")
                     emit(LocalResource.Success(ytId))
                 }.onFailure {
-                    emit(LocalResource.Error(it.message ?: errorMessage))
+                    emit(LocalResource.Error(errorMessage))
                 }
         } else {
             val e = res.exceptionOrNull()
-            e?.printStackTrace()
-            emit(LocalResource.Error(e?.message ?: errorMessage))
+            Logger.e("Repository", "Request failed")
+            emit(LocalResource.Error(errorMessage))
         }
     }
 
@@ -468,7 +468,7 @@ internal class LocalPlaylistRepositoryImpl(
         }
         val bytes = readLocalImageBytes(uri)
         if (bytes == null) {
-            Logger.w(TAG, "Cover push failed for $playlistId: could not read $uri")
+            Logger.w(TAG, "Playlist cover push failed because the selected image could not be read")
             return "Could not read the selected image"
         }
         Logger.d(TAG, "Uploading cover for $playlistId -> $ytId (${bytes.size} bytes)")
@@ -477,11 +477,11 @@ internal class LocalPlaylistRepositoryImpl(
             .fold(
                 onSuccess = { status ->
                     Logger.d(TAG, "Cover uploaded for $ytId, status $status")
-                    if (status in 200..299) null else "YouTube rejected the cover (HTTP $status)"
+                    if (status in 200..299) null else "YouTube couldn't accept this cover. Choose another image and try again."
                 },
                 onFailure = {
-                    Logger.e(TAG, "Cover upload failed for $ytId: ${it.message}")
-                    it.message ?: "Could not update the cover on YouTube"
+                    Logger.e(TAG, "Playlist cover upload to YouTube failed")
+                    "Your cover was saved on this device, but couldn't be updated on YouTube. Please try again."
                 },
             )
     }
@@ -559,8 +559,8 @@ internal class LocalPlaylistRepositoryImpl(
                             emit(true)
                         }
                     }.onFailure { e ->
-                        Logger.e(TAG, "updateListTrackSynced: onFailure ${e.message}")
-                        e.printStackTrace()
+                        Logger.e(TAG, "Request failed")
+                        Logger.e("Repository", "Request failed")
                         emit(false)
                     }
             }
@@ -619,10 +619,10 @@ internal class LocalPlaylistRepositoryImpl(
                             }
                             emit(LocalResource.Success(updatedYtMessage))
                         } else {
-                            emit(LocalResource.Error<String>("$errorMessage: Empty playlistEditResults"))
+                            emit(LocalResource.Error<String>(errorMessage))
                         }
                     }.onFailure {
-                        emit(LocalResource.Error<String>("$errorMessage: ${it.message}"))
+                        emit(LocalResource.Error<String>(errorMessage))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -659,10 +659,10 @@ internal class LocalPlaylistRepositoryImpl(
                             }
                             emit(LocalResource.Success(successMessage))
                         }.onFailure {
-                            emit(LocalResource.Error<String>("$errorMessage: ${it.message}"))
+                            emit(LocalResource.Error<String>(errorMessage))
                         }
                 } else {
-                    emit(LocalResource.Error<String>("$errorMessage: SetVideoId is null"))
+                    emit(LocalResource.Error<String>(errorMessage))
                 }
             }
         }.flowOn(Dispatchers.IO)
@@ -703,11 +703,11 @@ internal class LocalPlaylistRepositoryImpl(
                             ),
                         )
                     } else {
-                        emit(LocalResource.Error("List suggestions is null"))
+                        emit(LocalResource.Error("No song suggestions are available right now. Please try again later."))
                     }
                 }.onFailure { e ->
-                    e.printStackTrace()
-                    emit(LocalResource.Error(e.message ?: "Error"))
+                    Logger.e("Repository", "Request failed")
+                    emit(LocalResource.Error("Couldn't update this playlist. Please try again."))
                 }
         }
 
@@ -746,11 +746,11 @@ internal class LocalPlaylistRepositoryImpl(
                             }
                             emit(LocalResource.Success(Pair(reloadParamsNew, listTrack.toList())))
                         } else {
-                            emit(LocalResource.Error("Empty data"))
+                            emit(LocalResource.Error("No songs were returned. Please try again later."))
                         }
                     }.onFailure { exception ->
-                        exception.printStackTrace()
-                        emit(LocalResource.Error(exception.message ?: "Error"))
+                        Logger.e("Repository", "Request failed")
+                        emit(LocalResource.Error("Couldn't update this playlist. Please try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -817,7 +817,7 @@ internal class LocalPlaylistRepositoryImpl(
                                         values.getPlaylistContinuation()
                                     count++
                                 }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
+                                    Logger.e("Continue", "Request failed")
                                     continueParam = null
                                     count++
                                 }
@@ -839,7 +839,7 @@ internal class LocalPlaylistRepositoryImpl(
                             emit(playlist)
                         }
                     }.onFailure { e ->
-                        e.printStackTrace()
+                        Logger.e("Repository", "Request failed")
                         emit(emptyList())
                     }
             }
@@ -866,10 +866,10 @@ internal class LocalPlaylistRepositoryImpl(
                         }
                         emit(LocalResource.Success(it.status))
                     } else {
-                        emit(LocalResource.Error("FAILED"))
+                        emit(LocalResource.Error("Couldn't update this playlist. Please try again."))
                     }
                 }.onFailure {
-                    emit(LocalResource.Error("FAILED"))
+                    emit(LocalResource.Error("Couldn't update this playlist. Please try again."))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -957,18 +957,18 @@ internal class LocalPlaylistRepositoryImpl(
             emit(LocalResource.Loading())
 
             val localPlaylist = localDataSource.getLocalPlaylist(playlistId) ?: run {
-                emit(LocalResource.Error("Playlist not found"))
+                emit(LocalResource.Error("This playlist is no longer available. Refresh your library and try again."))
                 return@flow
             }
             val ytPlaylistId = localPlaylist.youtubePlaylistId ?: run {
-                emit(LocalResource.Error("Playlist is not synced with YouTube"))
+                emit(LocalResource.Error("Connect this playlist to YouTube before updating it there."))
                 return@flow
             }
 
             // Get all pairs ordered by position to resolve indexes
             val allPairs = localDataSource.getAllPlaylistPairSongByPosition(playlistId)
             if (fromIndex >= allPairs.size || toIndex >= allPairs.size) {
-                emit(LocalResource.Error("Index out of bounds"))
+                emit(LocalResource.Error("This playlist has changed. Refresh it and try moving the song again."))
                 return@flow
             }
 
@@ -978,7 +978,7 @@ internal class LocalPlaylistRepositoryImpl(
             // Resolve setVideoId of the moved item
             val movedSetVideoIdEntity = findSetVideoId(movedVideoId, ytPlaylistId)
             val movedSetVideoId = movedSetVideoIdEntity?.setVideoId ?: run {
-                emit(LocalResource.Error("SetVideoId not found for moved item: $movedVideoId"))
+                emit(LocalResource.Error("Couldn't find this song in the YouTube playlist. Sync the playlist and try again."))
                 return@flow
             }
 
@@ -998,7 +998,7 @@ internal class LocalPlaylistRepositoryImpl(
             val successorSetVideoId: String? =
                 successorVideoId?.let { videoId ->
                     findSetVideoId(videoId, ytPlaylistId)?.setVideoId ?: run {
-                        emit(LocalResource.Error("SetVideoId not found for successor item: $videoId"))
+                        emit(LocalResource.Error("Couldn't find the song's new position on YouTube. Sync the playlist and try again."))
                         return@flow
                     }
                 }
@@ -1012,15 +1012,15 @@ internal class LocalPlaylistRepositoryImpl(
                 ).onSuccess {
                     Logger.d(TAG, "moveItemInSyncedPlaylist: YouTube API success, status=$it")
                 }.onFailure { e ->
-                    Logger.e(TAG, "moveItemInSyncedPlaylist: YouTube API failed: ${e.message}")
-                    emit(LocalResource.Error("Failed to reorder on YouTube: ${e.message}"))
+                    Logger.e(TAG, "Playlist reorder on YouTube failed")
+                    emit(LocalResource.Error("Couldn't reorder this playlist on YouTube. Check your connection and try again."))
                     return@flow
                 }
 
             // Step 2: Update local DB positions — read, shift and place as one transaction. The API
             // call above stays outside it: a DB lock must never be held while waiting on the network.
             if (!localDataSource.moveSongInPlaylist(playlistId, fromIndex, toIndex)) {
-                emit(LocalResource.Error("Index out of bounds"))
+                emit(LocalResource.Error("This playlist has changed. Refresh it and try moving the song again."))
                 return@flow
             }
 
@@ -1045,7 +1045,7 @@ internal class LocalPlaylistRepositoryImpl(
             emit(LocalResource.Loading())
 
             if (!localDataSource.moveSongInPlaylist(playlistId, fromIndex, toIndex)) {
-                emit(LocalResource.Error("Index out of bounds"))
+                emit(LocalResource.Error("This playlist has changed. Refresh it and try moving the song again."))
                 return@flow
             }
 

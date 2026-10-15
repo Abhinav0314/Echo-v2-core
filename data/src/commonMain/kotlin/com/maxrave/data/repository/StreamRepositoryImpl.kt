@@ -77,7 +77,7 @@ internal class StreamRepositoryImpl(
                         )
                         Logger.w("UpdateFormat", "Updated format for $videoId")
                     }.onFailure { throwable ->
-                        Logger.e("UpdateFormat", "Error: ${throwable.message}")
+                        Logger.e("UpdateFormat", "Request failed")
                     }
             }
         }
@@ -299,8 +299,8 @@ internal class StreamRepositoryImpl(
                         )
                     }
                 }.onFailure {
-                    it.printStackTrace()
-                    Logger.e("Stream", "Error: ${it.message}")
+                    Logger.e("Repository", "Request failed")
+                    Logger.e("Stream", "Request failed")
                     emit(null)
                 }
         }.flowOn(Dispatchers.IO)
@@ -318,7 +318,7 @@ internal class StreamRepositoryImpl(
                 .onSuccess { response ->
                     emit(response)
                 }.onFailure {
-                    Logger.e("InitPlayback", "Error: ${it.message}")
+                    Logger.e("InitPlayback", "Request failed")
                     emit(Pair(0, 0f))
                 }
         }.flowOn(Dispatchers.IO)
@@ -335,7 +335,7 @@ internal class StreamRepositoryImpl(
                     .onSuccess { response ->
                         emit(response)
                     }.onFailure {
-                        it.printStackTrace()
+                        Logger.e("Repository", "Request failed")
                         emit(0)
                     }
             }
@@ -358,7 +358,7 @@ internal class StreamRepositoryImpl(
                     ).onSuccess { response ->
                         emit(response)
                     }.onFailure {
-                        it.printStackTrace()
+                        Logger.e("Repository", "Request failed")
                         emit(0)
                     }
             }
@@ -371,7 +371,7 @@ internal class StreamRepositoryImpl(
                 .onSuccess { data ->
                     emit(Resource.Success(data.map { it.toSponsorSkipSegments() }))
                 }.onFailure {
-                    emit(Resource.Error(it.message ?: "Unknown error"))
+                    emit(Resource.Error("Couldn't play this song right now. Please try again."))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -383,8 +383,8 @@ internal class StreamRepositoryImpl(
                 .onSuccess {
                     emit(Resource.Success(it.toTrack()))
                 }.onFailure {
-                    Logger.e("getFullMetadata", "Error: ${it.message}")
-                    emit(Resource.Error(it.message ?: "Unknown error"))
+                    Logger.e("getFullMetadata", "Request failed")
+                    emit(Resource.Error("Couldn't play this song right now. Please try again."))
                 }
         }.flowOn(Dispatchers.IO)
 

@@ -2898,7 +2898,7 @@ internal class MediaServiceHandlerImpl(
     override fun onPlayerError(error: PlayerError) {
         when (error.errorCode) {
             PlayerConstants.ERROR_CODE_TIMEOUT -> {
-                Logger.e("Player Error", "onPlayerError (${error.errorCode}): ${error.message}")
+                Logger.e("Player Error", "Playback failed (code=${error.errorCode})")
                 if (isAppInForeground()) {
                     showToast(ToastType.PlayerError(error.errorCodeName))
                 } else {
@@ -2908,8 +2908,8 @@ internal class MediaServiceHandlerImpl(
             }
 
             else -> {
-                Logger.e("Player Error", "onPlayerError (${error.errorCode}): ${error.message}")
-                pushPlayerError(error)
+                Logger.e("Player Error", "Playback failed (code=${error.errorCode})")
+                pushPlayerError(error.copy(message = null))
                 if (isAppInForeground()) {
                     showToast(ToastType.PlayerError(error.errorCodeName))
                 } else {

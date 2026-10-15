@@ -4,6 +4,7 @@ import DatabaseDao
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import com.maxrave.common.AppIdentity
 import com.maxrave.data.dataStore.DataStoreManagerImpl
 import com.maxrave.data.dataStore.createDataStoreInstance
 import com.maxrave.data.db.Converters
@@ -55,7 +56,7 @@ val databaseModule =
         }
         // DatastoreManager
         single<DataStoreManager>(createdAtStart = true) {
-            DataStoreManagerImpl(get<DataStore<Preferences>>())
+            DataStoreManagerImpl(get<DataStore<Preferences>>(), get<AppIdentity>().communityLyricsEnabled)
         }
 
         // Move YouTube from Singleton to Koin DI
@@ -72,7 +73,7 @@ val databaseModule =
         }
 
         single(createdAtStart = true) {
-            SimpMusicLyricsClient()
+            SimpMusicLyricsClient(communityApiEnabled = get<AppIdentity>().communityLyricsEnabled)
         }
 
         // Not created at start, unlike the rest: nothing needs it until someone opens the AutoEq

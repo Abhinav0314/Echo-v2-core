@@ -9,6 +9,8 @@ data class AppIdentity(
     val platform: String,
     /** Debug builds and Gradle runs. They read the test remote config and keep their cached copy of it apart. */
     val isDevBuild: Boolean = false,
+    /** Optional upstream service; forks can disable it without deleting its implementation. */
+    val communityLyricsEnabled: Boolean = true,
 ) {
     val userAgent: String
         get() = "${EchoConfig.APP_NAME}/$versionName ($applicationId; $platform)"

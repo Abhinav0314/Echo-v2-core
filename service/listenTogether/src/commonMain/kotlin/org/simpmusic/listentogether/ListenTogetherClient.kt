@@ -186,8 +186,8 @@ class ListenTogetherClient(
                         openAndRun()
                     } catch (e: CancellationException) {
                         throw e
-                    } catch (e: Exception) {
-                        Logger.e(TAG, "Connection error: ${e.message}")
+                    } catch (_: Exception) {
+                        Logger.e(TAG, "Listen Together connection failed")
                     }
                     // Keep retries in this same job. An old reader must never clear the new
                     // socket or start another reconnect after a deliberate disconnect.
@@ -212,7 +212,7 @@ class ListenTogetherClient(
         }.getOrElse { e ->
             // Socket cancellation is a failed send; cancellation of the caller still propagates.
             if (e is CancellationException) currentCoroutineContext().ensureActive()
-            Logger.w(TAG, "Send failed for $msgType: ${e.message}")
+            Logger.w(TAG, "Listen Together message could not be sent")
             false
         }
     }
@@ -239,7 +239,7 @@ class ListenTogetherClient(
 
     private suspend fun openAndRun() {
         val url = serverUrl().ifBlank { DEFAULT_SERVER_URL }
-        Logger.i(TAG, "Connecting to $url")
+        Logger.i(TAG, "Connecting to Listen Together")
         val live = client.webSocketSession(url)
         session = live
         codec = MessageCodec(compressionEnabled = true)
@@ -339,7 +339,7 @@ class ListenTogetherClient(
                     Logger.w(TAG, "Malformed server_capabilities")
                     return
                 }
-                Logger.i(TAG, "Handshake complete — server version ${caps.serverVersion}")
+                Logger.i(TAG, "Listen Together handshake complete")
                 handshake?.complete(caps)
                 // Internal to the handshake; the layer above has no use for it.
                 return
@@ -367,12 +367,12 @@ class ListenTogetherClient(
 
             MessageTypes.ERROR -> {
                 val error = payload as? ErrorPayload
-                Logger.w(TAG, "Server error: ${error?.code} ${error?.message}")
+                Logger.w(TAG, "Listen Together server rejected a request")
                 // `error?.code in set` would not compile — Set<String>.contains takes a non-null
                 // String, and a null code is not a rejection anyway.
                 if (error != null && (error.code in EXPIRED_ROOM_ERROR_CODES || error.code == "host_not_allowed")) sessionToken = null
                 if (error != null && error.code in NON_RECOVERABLE_ERROR_CODES) {
-                    Logger.e(TAG, "Server rejected this client (${error.code}) — not retrying")
+                    Logger.e(TAG, "Server rejected this client — not retrying")
                     fatal = true
                 }
             }

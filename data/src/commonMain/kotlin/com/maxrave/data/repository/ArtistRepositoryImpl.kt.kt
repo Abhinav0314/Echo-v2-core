@@ -126,7 +126,7 @@ internal class ArtistRepositoryImpl(
             }
         return result
             .onFailure {
-                Logger.w("ArtistRepositoryImpl", "Channel subscription sync failed: ${it.message}")
+                Logger.w("ArtistRepositoryImpl", "Request failed")
             }.isSuccess
     }
 
@@ -157,8 +157,8 @@ internal class ArtistRepositoryImpl(
                     .onSuccess { result ->
                         emit(Resource.Success<ArtistBrowse>(parseArtistData(result)))
                     }.onFailure { e ->
-                        Logger.d("Artist", "Error: ${e.message}")
-                        emit(Resource.Error<ArtistBrowse>(e.message.toString()))
+                        Logger.d("Artist", "Request failed")
+                        emit(Resource.Error<ArtistBrowse>("Couldn't load this artist. Please try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)

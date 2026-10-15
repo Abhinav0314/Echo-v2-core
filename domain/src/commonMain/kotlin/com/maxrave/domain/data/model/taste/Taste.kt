@@ -66,9 +66,12 @@ data class TasteProfile(
 class TasteException(
     val kind: Kind,
     val statusCode: Int? = null,
-    message: String? = null,
     cause: Throwable? = null,
-) : Exception(message, cause) {
+) : Exception(when(kind) {
+    Kind.NOT_CONFIGURED -> "Add your AI provider key in Settings to create a listening profile."
+    Kind.REJECTED -> "Your AI provider couldn't accept this request. Check the API key and model in Settings."
+    Kind.TEMPORARY -> "Couldn't create your listening profile right now. Please try again later."
+}, cause) {
     enum class Kind {
         /** No API key at all. */
         NOT_CONFIGURED,

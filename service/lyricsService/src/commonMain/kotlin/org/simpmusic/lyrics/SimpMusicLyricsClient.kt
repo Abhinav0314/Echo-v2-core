@@ -31,11 +31,16 @@ class SimpMusicLyricsApiException(
     cause: Throwable? = null,
 ) : Exception(message, cause)
 
-class SimpMusicLyricsClient {
+class LyricsProviderDisabledException : IllegalStateException("This lyrics provider is currently unavailable.")
+
+class SimpMusicLyricsClient(val communityApiEnabled: Boolean = true) {
     private val algorithm = ""
 
     private val hmacService = Hmac("HmacSHA256", "simpmusic-lyrics")
-    private val lyricsService = SimpMusicLyrics()
+    private val lyricsService by lazy { SimpMusicLyrics() }
+    private fun requireCommunityApi() {
+        if (!communityApiEnabled) throw LyricsProviderDisabledException()
+    }
     private var insertingLyrics: Pair<String?, Boolean> = (null to false)
     private val isInsertingLyrics: Boolean
         get() = insertingLyrics.second
@@ -48,6 +53,7 @@ class SimpMusicLyricsClient {
 
     suspend fun getLyrics(videoId: String): Result<List<LyricsResponse>> =
         lyricsResult {
+            requireCommunityApi()
             lyricsService.findLyricsByVideoId(videoId).bodyOrThrow<List<LyricsResponse>>()
         }
 
@@ -56,6 +62,7 @@ class SimpMusicLyricsClient {
         language: String,
     ): Result<TranslatedLyricsResponse> =
         lyricsResult {
+            requireCommunityApi()
             if (language.length != 2) {
                 throw IllegalArgumentException("Language code must be a 2-letter code")
             }
@@ -64,6 +71,7 @@ class SimpMusicLyricsClient {
 
     suspend fun insertLyrics(lyricsBody: LyricsBody): Result<LyricsResponse> =
         lyricsResult {
+            requireCommunityApi()
             if (tooManyRequest) {
                 throw IllegalStateException("Too many requests, please wait before trying again.")
             }
@@ -80,6 +88,7 @@ class SimpMusicLyricsClient {
 
     suspend fun insertTranslatedLyrics(translatedLyricsBody: TranslatedLyricsBody): Result<TranslatedLyricsResponse> =
         lyricsResult {
+            requireCommunityApi()
             if (translatedLyricsBody.language.length != 2) {
                 throw IllegalArgumentException("Language code must be a 2-letter code")
             }
@@ -99,6 +108,7 @@ class SimpMusicLyricsClient {
         upvote: Boolean,
     ): Result<LyricsResponse> =
         lyricsResult {
+            requireCommunityApi()
             val hmacTimestamp =
                 hmacService.getMacTimestampPair(
                     HmacUri.VOTE_HMAC_URI,
@@ -111,6 +121,7 @@ class SimpMusicLyricsClient {
         upvote: Boolean,
     ): Result<TranslatedLyricsResponse> =
         lyricsResult {
+            requireCommunityApi()
             val hmacTimestamp =
                 hmacService.getMacTimestampPair(
                     HmacUri.VOTE_TRANSLATED_HMAC_URI,

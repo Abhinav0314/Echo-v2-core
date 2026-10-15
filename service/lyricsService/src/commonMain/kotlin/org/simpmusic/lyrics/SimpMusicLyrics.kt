@@ -1,9 +1,7 @@
 package org.simpmusic.lyrics
 
-import com.maxrave.ktorext.curl.CurlLogger
 import com.maxrave.ktorext.encoding.brotli
 import com.maxrave.ktorext.getEngine
-import com.maxrave.logger.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.ProxyConfig
 import io.ktor.client.plugins.HttpSend
@@ -49,9 +47,8 @@ class SimpMusicLyrics {
             install(HttpCache)
             // A stalled primary lookup must release the player to its next lyric provider.
             installLyricsTimeouts()
-            install(CurlLogger) {
-                logger = { Logger.d("SimpMusicLyrics", it) }
-            }
+            // Raw curl logging can expose contributor emails, request signatures
+            // and Apple bearer tokens. Repositories log only fixed diagnostics.
             install(HttpSend) {
                 maxSendCount = 100
             }

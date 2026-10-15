@@ -392,7 +392,7 @@ class ListenTogetherSession(
                     } else {
                         // Losing the socket loses the room with it; leaving the room UI up would
                         // offer controls that silently do nothing.
-                        ListenTogetherState(connection = ConnectionState.Failed(event.reason ?: "Disconnected"))
+                        ListenTogetherState(connection = ConnectionState.Failed("Couldn't reconnect. Check your connection and try again."))
                     }
                 }
 
@@ -447,7 +447,7 @@ class ListenTogetherSession(
                 _state.update {
                     it.copy(
                         pendingJoinCode = null,
-                        error = (payload as? JoinRejectedPayload)?.reason?.ifBlank { null } ?: "The host declined",
+                        error = "The host declined your request to join this room.",
                     )
                 }
 
@@ -506,7 +506,7 @@ class ListenTogetherSession(
                 _state.value =
                     ListenTogetherState(
                         connection = _state.value.connection,
-                        error = (payload as? KickedPayload)?.reason ?: "Removed from the room",
+                        error = "You were removed from the room. Ask the host before joining again.",
                     )
 
             MessageTypes.BUFFER_WAIT -> {
@@ -558,11 +558,9 @@ class ListenTogetherSession(
                 // `rate_limited` is about one message, not the session, and showing it would put an
                 // alarming banner up for something the user cannot act on.
                 if (p.code != "rate_limited") {
-                    Logger.w(TAG, "Server error ${p.code}: ${p.message}")
+                    Logger.w(TAG, "Listen Together request failed")
                     // An error while waiting to be let in ends that wait — most often a bad code.
-                    val message = if (p.code == "host_not_allowed") {
-                        "This server does not allow Echo to host rooms. Choose an Echo-approved server in Listen Together settings. You can still join rooms when the server permits it."
-                    } else p.message.ifBlank { p.code }
+                    val message = listenTogetherErrorMessage(p.code)
                     _state.update {
                         if (p.code in ListenTogetherClient.EXPIRED_ROOM_ERROR_CODES || (p.code == "host_not_allowed" && it.connection is ConnectionState.Connecting)) {
                             ListenTogetherState(connection = ConnectionState.Connected(serverVersion), error = message)

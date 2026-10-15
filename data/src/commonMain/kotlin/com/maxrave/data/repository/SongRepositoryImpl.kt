@@ -162,7 +162,7 @@ internal class SongRepositoryImpl(
             runCatching {
                 localDataSource.checkpoint()
                 localDataSource.vacuum()
-            }.onFailure { Logger.e(TAG, "VACUUM after clearing history failed: ${it.message}") }
+            }.onFailure { Logger.e(TAG, "Request failed") }
             removed
         }
 
@@ -397,7 +397,7 @@ internal class SongRepositoryImpl(
                             newContinuation = next.continuation
                             emit(Pair(data.toListTrack(), newContinuation))
                         }.onFailure { exception ->
-                            exception.printStackTrace()
+                            Logger.e("Repository", "Request failed")
                             emit(Pair(null, null))
                         }
                 } else {
@@ -430,7 +430,7 @@ internal class SongRepositoryImpl(
                                 ),
                             )
                         }.onFailure {
-                            Logger.e(TAG, "getContinueTrack -> Error: ${it.message}")
+                            Logger.e(TAG, "Request failed")
                             emit(Pair(null, null))
                         }
                 }
@@ -467,7 +467,7 @@ internal class SongRepositoryImpl(
                             song,
                         )
                     }.onFailure {
-                        it.printStackTrace()
+                        Logger.e("Repository", "Request failed")
                         emit(getSongInfoEntity(videoId).lastOrNull())
                     }
             }
@@ -481,7 +481,7 @@ internal class SongRepositoryImpl(
                     .onSuccess {
                         if (it == LikeStatus.LIKE) emit(true) else emit(false)
                     }.onFailure {
-                        it.printStackTrace()
+                        Logger.e("Repository", "Request failed")
                         emit(false)
                     }
             }
@@ -499,7 +499,7 @@ internal class SongRepositoryImpl(
                             Logger.d(TAG, "Liked -> Success: $it")
                             emit(it)
                         }.onFailure {
-                            it.printStackTrace()
+                            Logger.e("Repository", "Request failed")
                             emit(0)
                         }
                 }
@@ -517,7 +517,7 @@ internal class SongRepositoryImpl(
                             Logger.d(TAG, "Liked -> Success: $it")
                             emit(it)
                         }.onFailure {
-                            it.printStackTrace()
+                            Logger.e("Repository", "Request failed")
                             emit(0)
                         }
                 }
@@ -570,8 +570,8 @@ internal class SongRepositoryImpl(
                         val nextContinuation = next.continuation
                         emit(Resource.Success<Pair<List<Track>, String?>>(Pair(data.toListTrack().toList(), nextContinuation)))
                     }.onFailure { exception ->
-                        exception.printStackTrace()
-                        emit(Resource.Error<Pair<List<Track>, String?>>(exception.message.toString()))
+                        Logger.e("Repository", "Request failed")
+                        emit(Resource.Error<Pair<List<Track>, String?>>("Couldn't load this song. Please try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -588,8 +588,8 @@ internal class SongRepositoryImpl(
                             )
                         emit(Resource.Success(Pair(items.toListTrack(), next.continuation)))
                     }.onFailure {
-                        it.printStackTrace()
-                        emit(Resource.Error(it.message ?: "Error"))
+                        Logger.e("Repository", "Request failed")
+                        emit(Resource.Error("Couldn't load this song. Please try again."))
                     }
             }
         }

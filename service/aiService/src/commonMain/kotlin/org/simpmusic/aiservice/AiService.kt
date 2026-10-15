@@ -105,9 +105,9 @@ class AiService(
                 .firstOrNull()
                 ?.message
                 ?.content
-                ?: throw TasteException(TasteException.Kind.TEMPORARY, message = "Empty response from AI")
+                ?: throw TasteException(TasteException.Kind.TEMPORARY)
         return parseTasteReading(raw)
-            ?: throw TasteException(TasteException.Kind.TEMPORARY, message = "Unreadable response from AI")
+            ?: throw TasteException(TasteException.Kind.TEMPORARY)
     }
 
     suspend fun translateLyrics(

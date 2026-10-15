@@ -109,8 +109,8 @@ internal class AlbumRepositoryImpl(
                     .onSuccess { result ->
                         emit(Resource.Success(parseAlbumData(result)))
                     }.onFailure { e ->
-                        Logger.d(TAG, "getAlbumData -> error: ${e.message}")
-                        emit(Resource.Error(e.message.toString()))
+                        Logger.d(TAG, "Request failed")
+                        emit(Resource.Error("Couldn't load this album. Please try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -137,7 +137,7 @@ internal class AlbumRepositoryImpl(
                             ),
                         )
                     }.onFailure {
-                        it.printStackTrace()
+                        Logger.e("Repository", "Request failed")
                         emit(null)
                     }
             }

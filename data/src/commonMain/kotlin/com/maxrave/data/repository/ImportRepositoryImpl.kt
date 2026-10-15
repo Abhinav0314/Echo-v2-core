@@ -50,7 +50,7 @@ internal class ImportRepositoryImpl(
             val data =
                 runCatching { jsonFormat.decodeFromString<ImportData>(json) }
                     .getOrElse { throwable ->
-                        Logger.e(TAG, "import: cannot parse file - ${throwable.message}")
+                        Logger.e(TAG, "Import file could not be read")
                         emit(ImportProgress.Error(invalidFileMessage))
                         return@flow
                     }
@@ -100,8 +100,8 @@ internal class ImportRepositoryImpl(
                 Logger.i(TAG, "import: $result")
                 emit(ImportProgress.Success(result))
             }.onFailure { throwable ->
-                Logger.e(TAG, "import: failed while writing - ${throwable.message}")
-                emit(ImportProgress.Error(throwable.message ?: invalidFileMessage))
+                Logger.e(TAG, "Imported data could not be saved")
+                emit(ImportProgress.Error("Couldn't save the imported data. Check your device's available storage and try again."))
             }
         }.flowOn(Dispatchers.IO)
 }

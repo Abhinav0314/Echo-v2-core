@@ -198,8 +198,8 @@ internal class PlaylistRepositoryImpl(
                             Logger.w("Repository", "playlistBrowse: $playlistBrowse")
                             emit(Resource.Success<Pair<PlaylistBrowse, String?>>(Pair(playlistBrowse, continuation)))
                         }.onFailure { exception ->
-                            exception.printStackTrace()
-                            emit(Resource.Error<Pair<PlaylistBrowse, String?>>(exception.message.toString()))
+                            Logger.e("Repository", "Request failed")
+                            emit(Resource.Error<Pair<PlaylistBrowse, String?>>("Couldn't load this playlist. Please try again."))
                         }
                 }
             }.flowOn(Dispatchers.IO)
@@ -293,13 +293,13 @@ internal class PlaylistRepositoryImpl(
                                         ),
                                     ),
                                 )
-                            } ?: emit(Resource.Error("Can't parse data"))
+                            } ?: emit(Resource.Error("Couldn't load this playlist. Please try again."))
                         } else {
-                            emit(Resource.Error("Continue param is null"))
+                            emit(Resource.Error("Couldn't load more songs. Refresh this playlist and try again."))
                         }
                     }.onFailure { e ->
-                        Logger.e("Playlist Data", e.message ?: "Error")
-                        emit(Resource.Error(e.message.toString()))
+                        Logger.e("Playlist Data", "Request failed")
+                        emit(Resource.Error("Couldn't load this playlist. Please try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -410,7 +410,7 @@ internal class PlaylistRepositoryImpl(
                                         values.getPlaylistContinuation()
                                     count++
                                 }.onFailure {
-                                    Logger.e("getPlaylistData", "Error: ${it.message}")
+                                    Logger.e("getPlaylistData", "Request failed")
                                     continueParam = null
                                     count++
                                 }
@@ -428,10 +428,10 @@ internal class PlaylistRepositoryImpl(
                                     ),
                                 ),
                             )
-                        } ?: emit(Resource.Error<PlaylistBrowse>("Error"))
+                        } ?: emit(Resource.Error<PlaylistBrowse>("Couldn't load this playlist. Please try again."))
                     }.onFailure { e ->
-                        Logger.e("getPlaylistData", e.message ?: "Error")
-                        emit(Resource.Error<PlaylistBrowse>(e.message.toString()))
+                        Logger.e("getPlaylistData", "Playlist request failed")
+                        emit(Resource.Error<PlaylistBrowse>("Couldn't load this playlist. Please try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -534,22 +534,22 @@ internal class PlaylistRepositoryImpl(
                             } ?: emit(
                                 Resource.Error<
                                     Pair<PlaylistBrowse, String?>,
-                                >("Error"),
+                                >("Couldn't load this playlist. Please try again."),
                             )
                         } catch (e: Exception) {
-                            e.printStackTrace()
+                            Logger.e("Repository", "Request failed")
                             emit(
                                 Resource.Error<
                                     Pair<PlaylistBrowse, String?>,
-                                >(e.message.toString()),
+                                >("Couldn't load this playlist. Please try again."),
                             )
                         }
                     }.onFailure { e ->
-                        Logger.e("getPlaylistData", e.message ?: "Error")
+                        Logger.e("getPlaylistData", "Playlist request failed")
                         emit(
                             Resource.Error<
                                 Pair<PlaylistBrowse, String?>,
-                            >(e.message.toString()),
+                            >("Couldn't load this playlist. Please try again."),
                         )
                     }
             }
@@ -609,8 +609,8 @@ internal class PlaylistRepositoryImpl(
                                     parseNextLibraryPlaylist(nextInput),
                                 )
                             }.onFailure { exception ->
-                                exception.printStackTrace()
-                                Logger.e("Library", "Error: ${exception.message}")
+                                Logger.e("Repository", "Request failed")
+                                Logger.e("Library", "Request failed")
                                 continuation = null
                             }
                     }
@@ -632,8 +632,8 @@ internal class PlaylistRepositoryImpl(
                         emit(null)
                     }
                 }.onFailure { e ->
-                    Logger.e("Library", "Error: ${e.message}")
-                    e.printStackTrace()
+                    Logger.e("Library", "Request failed")
+                    Logger.e("Repository", "Request failed")
                     val account = localDataSource.getUsedGoogleAccount()
                     val isNeeded =
                         dataStoreManager.keepYouTubePlaylistOffline.first() == DataStoreManager.TRUE &&
@@ -728,8 +728,8 @@ internal class PlaylistRepositoryImpl(
                                     parseNextLibraryPlaylist(nextInput),
                                 )
                             }.onFailure { exception ->
-                                exception.printStackTrace()
-                                Logger.e("Mixed For You", "Error: ${exception.message}")
+                                Logger.e("Repository", "Request failed")
+                                Logger.e("Mixed For You", "Request failed")
                                 continuation = null
                             }
                     }
@@ -751,7 +751,7 @@ internal class PlaylistRepositoryImpl(
                 .onSuccess {
                     emit(Resource.Success(it.toString()))
                 }.onFailure {
-                    emit(Resource.Error<String>(it.message ?: "Unknown error"))
+                    emit(Resource.Error<String>("Couldn't load this playlist. Please try again."))
                 }
         }.flowOn(Dispatchers.IO)
 
@@ -785,8 +785,8 @@ internal class PlaylistRepositoryImpl(
                         }
                     emit(Resource.Success(result))
                 }.onFailure { exception ->
-                    exception.printStackTrace()
-                    emit(Resource.Error<List<ChartItem>>(exception.message ?: "Unknown error"))
+                    Logger.e("Repository", "Request failed")
+                    emit(Resource.Error<List<ChartItem>>("Couldn't load this playlist. Please try again."))
                 }
         }.flowOn(Dispatchers.IO)
 }

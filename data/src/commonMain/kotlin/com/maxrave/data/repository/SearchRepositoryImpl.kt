@@ -66,7 +66,7 @@ internal class SearchRepositoryImpl(
                                     count++
                                     countinueParam = values.continuation
                                 }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
+                                    Logger.e("Continue", "Request failed")
                                     countinueParam = null
                                     count++
                                 }
@@ -74,8 +74,8 @@ internal class SearchRepositoryImpl(
 
                         emit(Resource.Success<ArrayList<SongsResult>>(listSongs))
                     }.onFailure { e ->
-                        Logger.d("Search", "Error: ${e.message}")
-                        emit(Resource.Error<ArrayList<SongsResult>>(e.message.toString()))
+                        Logger.d("Search", "Request failed")
+                        emit(Resource.Error<ArrayList<SongsResult>>("Couldn't complete your search. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -102,7 +102,7 @@ internal class SearchRepositoryImpl(
                                     count++
                                     countinueParam = values.continuation
                                 }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
+                                    Logger.e("Continue", "Request failed")
                                     countinueParam = null
                                     count++
                                 }
@@ -110,8 +110,8 @@ internal class SearchRepositoryImpl(
 
                         emit(Resource.Success<ArrayList<VideosResult>>(listSongs))
                     }.onFailure { e ->
-                        Logger.d("Search", "Error: ${e.message}")
-                        emit(Resource.Error<ArrayList<VideosResult>>(e.message.toString()))
+                        Logger.d("Search", "Request failed")
+                        emit(Resource.Error<ArrayList<VideosResult>>("Couldn't complete your search. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -140,15 +140,15 @@ internal class SearchRepositoryImpl(
                                     count++
                                     countinueParam = values.continuation
                                 }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
+                                    Logger.e("Continue", "Request failed")
                                     countinueParam = null
                                     count++
                                 }
                         }
                         emit(Resource.Success<ArrayList<PlaylistsResult>>(listPlaylist))
                     }.onFailure { e ->
-                        Logger.d("Search", "Error: ${e.message}")
-                        emit(Resource.Error<ArrayList<PlaylistsResult>>(e.message.toString()))
+                        Logger.d("Search", "Request failed")
+                        emit(Resource.Error<ArrayList<PlaylistsResult>>("Couldn't complete your search. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -175,15 +175,15 @@ internal class SearchRepositoryImpl(
                                     count++
                                     countinueParam = values.continuation
                                 }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
+                                    Logger.e("Continue", "Request failed")
                                     countinueParam = null
                                     count++
                                 }
                         }
                         emit(Resource.Success<ArrayList<PlaylistsResult>>(listPlaylist))
                     }.onFailure { e ->
-                        Logger.d("Search", "Error: ${e.message}")
-                        emit(Resource.Error<ArrayList<PlaylistsResult>>(e.message.toString()))
+                        Logger.d("Search", "Request failed")
+                        emit(Resource.Error<ArrayList<PlaylistsResult>>("Couldn't complete your search. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -210,15 +210,15 @@ internal class SearchRepositoryImpl(
                                     count++
                                     countinueParam = values.continuation
                                 }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
+                                    Logger.e("Continue", "Request failed")
                                     countinueParam = null
                                     count++
                                 }
                         }
                         emit(Resource.Success<ArrayList<ArtistsResult>>(listArtist))
                     }.onFailure { e ->
-                        Logger.d("Search", "Error: ${e.message}")
-                        emit(Resource.Error<ArrayList<ArtistsResult>>(e.message.toString()))
+                        Logger.d("Search", "Request failed")
+                        emit(Resource.Error<ArrayList<ArtistsResult>>("Couldn't complete your search. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -245,15 +245,15 @@ internal class SearchRepositoryImpl(
                                     count++
                                     countinueParam = values.continuation
                                 }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
+                                    Logger.e("Continue", "Request failed")
                                     countinueParam = null
                                     count++
                                 }
                         }
                         emit(Resource.Success<ArrayList<AlbumsResult>>(listAlbum))
                     }.onFailure { e ->
-                        Logger.d("Search", "Error: ${e.message}")
-                        emit(Resource.Error<ArrayList<AlbumsResult>>(e.message.toString()))
+                        Logger.d("Search", "Request failed")
+                        emit(Resource.Error<ArrayList<AlbumsResult>>("Couldn't complete your search. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -280,15 +280,15 @@ internal class SearchRepositoryImpl(
                                     count++
                                     countinueParam = values.continuation
                                 }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
+                                    Logger.e("Continue", "Request failed")
                                     countinueParam = null
                                     count++
                                 }
                         }
                         emit(Resource.Success<ArrayList<PlaylistsResult>>(listPlaylist))
                     }.onFailure { e ->
-                        Logger.d("Search", "Error: ${e.message}")
-                        emit(Resource.Error<ArrayList<PlaylistsResult>>(e.message.toString()))
+                        Logger.d("Search", "Request failed")
+                        emit(Resource.Error<ArrayList<PlaylistsResult>>("Couldn't complete your search. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)
@@ -301,8 +301,8 @@ internal class SearchRepositoryImpl(
                     .onSuccess {
                         emit(Resource.Success(it.toDomainSearchSuggestions()))
                     }.onFailure { e ->
-                        Logger.d("Suggest", "Error: ${e.message}")
-                        emit(Resource.Error<SearchSuggestions>(e.message.toString()))
+                        Logger.d("Suggest", "Request failed")
+                        emit(Resource.Error<SearchSuggestions>("Couldn't complete your search. Check your connection and try again."))
                     }
             }
         }.flowOn(Dispatchers.IO)

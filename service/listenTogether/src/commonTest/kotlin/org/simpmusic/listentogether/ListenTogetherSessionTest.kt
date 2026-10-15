@@ -80,7 +80,7 @@ class ListenTogetherSessionTest {
             transport.message(MessageTypes.ERROR, ErrorPayload("session_expired", "Session expired"))
             assertTrue(session.state.value.isConnected)
             assertFalse(session.state.value.inRoom)
-            assertEquals("Session expired", session.state.value.error)
+            assertEquals("Your room session has expired. Join the room again.", session.state.value.error)
         } finally { session.release() }
     }
 
@@ -131,6 +131,36 @@ class ListenTogetherSessionTest {
             assertTrue(session.state.value.isConnected)
             assertFalse(session.state.value.inRoom)
             assertTrue(session.state.value.error.orEmpty().contains("Echo-approved server"))
+        } finally { session.release() }
+    }
+
+    @Test
+    fun serverErrorMessagesAndUnknownCodesNeverReachUserState() = runBlocking {
+        val transport=Transport()
+        val session=ListenTogetherSession(transport,Dispatchers.Unconfined)
+        try {
+            session.connect()
+            transport.events.emit(ListenTogetherEvent.Connected("1",true,false))
+            transport.message(MessageTypes.ERROR,ErrorPayload("private@example.com access_token=secret","internal server path https://private.invalid"))
+            assertEquals("Listen Together couldn't finish that request. Please try again.",session.state.value.error)
+            assertTrue(session.state.value.isConnected)
+            transport.message(MessageTypes.ERROR,ErrorPayload("room_not_found","private room owner secret"))
+            assertEquals("This room couldn't be found. Check the room code or ask the host for a new one.",session.state.value.error)
+        } finally { session.release() }
+    }
+
+    @Test
+    fun joinRejectionAndKickDiscardRemoteReasonText() = runBlocking {
+        val transport=Transport()
+        val session=ListenTogetherSession(transport,Dispatchers.Unconfined)
+        try {
+            session.connect()
+            transport.events.emit(ListenTogetherEvent.Connected("1",true,false))
+            transport.message(MessageTypes.JOIN_REJECTED,JoinRejectedPayload("private@example.com internal-error"))
+            assertEquals("The host declined your request to join this room.",session.state.value.error)
+            transport.message(MessageTypes.KICKED,KickedPayload("private@example.com internal-error"))
+            assertEquals("You were removed from the room. Ask the host before joining again.",session.state.value.error)
+            assertFalse(session.state.value.inRoom)
         } finally { session.release() }
     }
 }
