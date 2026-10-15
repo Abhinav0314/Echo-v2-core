@@ -4,21 +4,27 @@ import com.maxrave.domain.extension.decodeHtmlEntities
 import org.simpmusic.lyrics.domain.Lyrics
 
 fun parseSyncedLyrics(data: String): Lyrics {
-    val regex = Regex("\\[(\\d{2}):(\\d{2})\\.(\\d{2})\\](.+)")
+    // LRC providers use tenths, centiseconds or milliseconds, and sometimes omit the fraction.
+    val regex = Regex("\\[(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?\\]")
     val lines = data.lines()
     val linesLyrics = ArrayList<Lyrics.LyricsX.Line>()
-    lines.map { line ->
-        val matchResult = regex.matchEntire(line)
-        if (matchResult != null) {
+    lines.forEach { line ->
+        val contentLine = line.trimStart()
+        val timestamps = regex.findAll(contentLine).takeWhile { match ->
+            // Only leading timestamp tags count; a timestamp in the words is not a new line.
+            contentLine.substring(0, match.range.first).replace(regex, "").isBlank()
+        }.toList()
+        val rawContent = timestamps.lastOrNull()?.let { contentLine.substring(it.range.last + 1) }
+        timestamps.forEach { matchResult ->
             val minutes = matchResult.groupValues[1].toLong()
             val seconds = matchResult.groupValues[2].toLong()
-            val milliseconds = matchResult.groupValues[3].toLong()
+            val fraction = matchResult.groupValues[3]
+            val milliseconds = fraction.padEnd(3, '0').toLongOrNull() ?: 0L
             val timeInMillis = minutes * 60_000L + seconds * 1000L + milliseconds
             // Trim, don't drop a fixed first character. Most providers leave a space after
             // "]", but LRCLIB packs the text right against it — "[00:27.12]boy, you got me"
             // — so removeRange(0, 1) ate the first letter of every single line.
-            val rawContent = matchResult.groupValues[4]
-            val content = if (rawContent.isBlank()) "♫" else rawContent.trimStart()
+            val content = if (rawContent.isNullOrBlank()) "♫" else rawContent.trimStart()
             linesLyrics.add(
                 Lyrics.LyricsX.Line(
                     endTimeMs = "0",
@@ -32,7 +38,7 @@ fun parseSyncedLyrics(data: String): Lyrics {
     return Lyrics(
         lyrics =
             Lyrics.LyricsX(
-                lines = linesLyrics,
+                lines = linesLyrics.sortedBy { it.startTimeMs.toLong() },
                 syncType = "LINE_SYNCED",
             ),
     )

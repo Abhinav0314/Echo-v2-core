@@ -14,7 +14,6 @@ import org.simpmusic.lyrics.am.AMArtistResource
 import org.simpmusic.lyrics.am.AMSearchResponse
 import org.simpmusic.lyrics.models.request.LyricsBody
 import org.simpmusic.lyrics.models.request.TranslatedLyricsBody
-import org.simpmusic.lyrics.models.response.BaseResponse
 import org.simpmusic.lyrics.models.response.BetterLyricsResponse
 import org.simpmusic.lyrics.models.response.LrclibObject
 import org.simpmusic.lyrics.models.response.LyricsResponse
@@ -29,7 +28,8 @@ private const val TAG = "SimpMusicLyricsClient"
 class SimpMusicLyricsApiException(
     val code: Int,
     message: String,
-) : Exception(message)
+    cause: Throwable? = null,
+) : Exception(message, cause)
 
 class SimpMusicLyricsClient {
     private val algorithm = ""
@@ -47,7 +47,7 @@ class SimpMusicLyricsClient {
         get() = insertingTranslatedLyrics.second
 
     suspend fun getLyrics(videoId: String): Result<List<LyricsResponse>> =
-        runCatching {
+        lyricsResult {
             lyricsService.findLyricsByVideoId(videoId).bodyOrThrow<List<LyricsResponse>>()
         }
 
@@ -55,7 +55,7 @@ class SimpMusicLyricsClient {
         videoId: String,
         language: String,
     ): Result<TranslatedLyricsResponse> =
-        runCatching {
+        lyricsResult {
             if (language.length != 2) {
                 throw IllegalArgumentException("Language code must be a 2-letter code")
             }
@@ -63,7 +63,7 @@ class SimpMusicLyricsClient {
         }
 
     suspend fun insertLyrics(lyricsBody: LyricsBody): Result<LyricsResponse> =
-        runCatching {
+        lyricsResult {
             if (tooManyRequest) {
                 throw IllegalStateException("Too many requests, please wait before trying again.")
             }
@@ -79,7 +79,7 @@ class SimpMusicLyricsClient {
         }
 
     suspend fun insertTranslatedLyrics(translatedLyricsBody: TranslatedLyricsBody): Result<TranslatedLyricsResponse> =
-        runCatching {
+        lyricsResult {
             if (translatedLyricsBody.language.length != 2) {
                 throw IllegalArgumentException("Language code must be a 2-letter code")
             }
@@ -98,7 +98,7 @@ class SimpMusicLyricsClient {
         lyricsId: String,
         upvote: Boolean,
     ): Result<LyricsResponse> =
-        runCatching {
+        lyricsResult {
             val hmacTimestamp =
                 hmacService.getMacTimestampPair(
                     HmacUri.VOTE_HMAC_URI,
@@ -110,7 +110,7 @@ class SimpMusicLyricsClient {
         translatedLyricsId: String,
         upvote: Boolean,
     ): Result<TranslatedLyricsResponse> =
-        runCatching {
+        lyricsResult {
             val hmacTimestamp =
                 hmacService.getMacTimestampPair(
                     HmacUri.VOTE_TRANSLATED_HMAC_URI,
@@ -122,7 +122,7 @@ class SimpMusicLyricsClient {
         q_track: String,
         q_artist: String,
         duration: Int?,
-    ) = runCatching {
+    ) = lyricsResult {
         val rs =
             lyricsService
                 .searchLrclibLyrics(
@@ -154,7 +154,7 @@ class SimpMusicLyricsClient {
         q_track: String,
         q_artist: String,
         durationSeconds: Int?,
-    ) = runCatching {
+    ) = lyricsResult {
         val rs =
             lyricsService
                 .searchBetterLyrics(
@@ -169,7 +169,7 @@ class SimpMusicLyricsClient {
         name: String,
         limit: Int = 5,
     ): Result<List<AMArtistResource>> =
-        runCatching {
+        lyricsResult {
             val response = lyricsService.searchAMArtist(name, limit)
             if (response.status.value !in 200..299) {
                 throw Exception("AM search failed: ${response.status.value}")
@@ -189,7 +189,7 @@ class SimpMusicLyricsClient {
      * Returns null when the id is not present in the response.
      */
     suspend fun getAMArtist(id: String): Result<AMArtistResource?> =
-        runCatching {
+        lyricsResult {
             val response = lyricsService.getAMArtist(id)
             if (response.status.value !in 200..299) {
                 throw Exception("AM artist fetch failed: ${response.status.value}")
@@ -209,7 +209,7 @@ class SimpMusicLyricsClient {
         query: String,
         limit: Int = 5,
     ): Result<List<AMAlbumResource>> =
-        runCatching {
+        lyricsResult {
             val response = lyricsService.searchAMAlbum(query, limit)
             if (response.status.value !in 200..299) {
                 throw Exception("AM album search failed: ${response.status.value}")
@@ -236,7 +236,7 @@ class SimpMusicLyricsClient {
         query: String,
         limit: Int = 5,
     ): Result<List<AMSongWithAlbum>> =
-        runCatching {
+        lyricsResult {
             val response = lyricsService.searchAMSongs(query, limit)
             if (response.status.value !in 200..299) {
                 throw Exception("AM song search failed: ${response.status.value}")
@@ -281,7 +281,7 @@ class SimpMusicLyricsClient {
         masterUrl: String,
         minWidth: Int,
     ): Result<String?> =
-        runCatching {
+        lyricsResult {
             val response = lyricsService.fetchAMHlsPlaylist(masterUrl)
             if (response.status.value !in 200..299) {
                 throw Exception("AM playlist fetch failed: ${response.status.value}")
@@ -298,18 +298,6 @@ class SimpMusicLyricsClient {
         } else {
             tooManyRequest = false
         }
-        try {
-            val data = body<BaseResponse<T>>()
-            if (data.error != null) {
-                val error = data.error
-                val message = "Error response: ${error.reason} (code: ${error.code})"
-                // 404 is the normal answer for a song nobody has added lyrics for, not a failure.
-                if (error.code == 404) Logger.d(TAG, message) else Logger.e(TAG, message)
-                throw SimpMusicLyricsApiException(error.code, message)
-            }
-            return data.data ?: throw Exception("Response data is null")
-        } catch (e: Exception) {
-            throw e
-        }
+        return lyricsBodyOrThrow()
     }
 }

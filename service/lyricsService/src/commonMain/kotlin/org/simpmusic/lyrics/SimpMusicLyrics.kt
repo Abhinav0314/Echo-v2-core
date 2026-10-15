@@ -47,6 +47,8 @@ class SimpMusicLyrics {
             expectSuccess = false
             followRedirects = true
             install(HttpCache)
+            // A stalled primary lookup must release the player to its next lyric provider.
+            installLyricsTimeouts()
             install(CurlLogger) {
                 logger = { Logger.d("SimpMusicLyrics", it) }
             }

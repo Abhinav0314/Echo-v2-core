@@ -510,7 +510,7 @@ internal class LyricsCanvasRepositoryImpl(
         strack: String,
         duration: Int?,
     ): Flow<Resource<Lyrics>> =
-        flow {
+        lrclibLyricsFlow {
             Logger.w("Lyrics", "getLrclibLyricsData: $sartist $strack $duration")
             val qartist =
                 sartist
@@ -536,12 +536,6 @@ internal class LyricsCanvasRepositoryImpl(
                     .replace(".", " ")
             simpMusicLyrics
                 .searchLrclibLyrics(qtrack, qartist, duration)
-                .onSuccess {
-                    it?.let { emit(Resource.Success<Lyrics>(it.toLyrics())) }
-                }.onFailure {
-                    it.printStackTrace()
-                    emit(Resource.Error<Lyrics>("Not found"))
-                }
         }.flowOn(Dispatchers.IO)
 
     override fun getBetterLyrics(

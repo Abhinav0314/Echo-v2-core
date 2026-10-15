@@ -25,6 +25,7 @@ kotlin {
         namespace = "org.simpmusic.lyrics"
         compileSdk = 37
         minSdk = 26
+        withHostTest {}
     }
 
     // For iOS targets, this is also where you should
@@ -78,6 +79,7 @@ kotlin {
         commonTest {
             dependencies {
                 implementation(libs.kotlin.test)
+                implementation("io.ktor:ktor-client-mock:${libs.versions.ktor.get()}")
             }
         }
 

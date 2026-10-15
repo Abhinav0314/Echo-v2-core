@@ -1,5 +1,9 @@
 package com.maxrave.data.repository
 
+import club.vibescape.echo.contracts.EchoDiagnostics
+import club.vibescape.echo.contracts.EchoOperation
+import io.github.jan.supabase.exceptions.RestException
+
 import com.maxrave.domain.data.model.update.UpdateData
 import com.maxrave.domain.repository.UpdateRepository
 import com.maxrave.domain.utils.Resource
@@ -32,11 +36,13 @@ private data class EchoReleaseMetadata(
 internal class UpdateRepositoryImpl(private val supabaseProvider: () -> SupabaseClient) : UpdateRepository {
     override fun checkForEchoUpdate(currentVersionCode: Int): Flow<Resource<UpdateData>> = flow<Resource<UpdateData>> {
         try {
+            EchoDiagnostics.started(EchoOperation.UpdateCheck)
             val releases = supabaseProvider().postgrest[EchoConfig.RELEASE_CATALOG_TABLE].select {
                 filter { eq("application_id", EchoConfig.APPLICATION_ID); eq("release_channel", EchoConfig.RELEASE_CHANNEL); gt("version_code", currentVersionCode) }
                 order("version_code", Order.DESCENDING)
             }.decodeList<EchoReleaseMetadata>()
             val latest = releases.firstOrNull()
+            EchoDiagnostics.succeeded(EchoOperation.UpdateCheck)
             emit(Resource.Success(latest?.let {
                 UpdateData(tagName = it.version_name, releaseTime = null, body = it.changelog_markdown,
                     apkUrl = it.apk_url, versionCode = it.version_code, apkSha256 = it.apk_sha256,
@@ -45,7 +51,8 @@ internal class UpdateRepositoryImpl(private val supabaseProvider: () -> Supabase
             } ?: UpdateData(tagName = "", releaseTime = null, body = "", versionCode = currentVersionCode)))
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            EchoDiagnostics.failed(EchoOperation.UpdateCheck, failure, (failure as? RestException)?.statusCode)
             // No backend configuration or an unavailable catalog must not prevent playback.
             emit(Resource.Error("Echo updates are unavailable. Try again later."))
         }
