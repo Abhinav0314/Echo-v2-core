@@ -11,9 +11,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 import org.simpmusic.listentogether.ListenTogetherClient
 import org.simpmusic.listentogether.ListenTogetherSession
+import org.simpmusic.listentogether.ListenTogetherTransport
 
 /**
  * Listen Together lives for as long as the app does, not as long as its screen.
@@ -33,7 +35,7 @@ val listenTogetherModule =
                     runBlocking { get<DataStoreManager>().getString(ListenTogetherPrefs.SERVER_URL).first().orEmpty() }
                 },
             )
-        }
+        } bind ListenTogetherTransport::class
 
         single { ListenTogetherSession(client = get()) }
 
