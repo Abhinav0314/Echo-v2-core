@@ -8,24 +8,25 @@ import kotlin.test.assertNull
 class LyricsMappingTest {
     @Test
     fun validThreeDigitLrcResponseReachesTheSharedDisplayModel() {
-        val lyrics = response(synced = "[00:01.123]First line\n[00:02.456]Second line").toLyrics()!!
+        val lyrics = requireNotNull(response(synced = "[00:01.123]First line\n[00:02.456]Second line").toLyrics())
+        val lines = requireNotNull(lyrics.lines)
         assertEquals("LINE_SYNCED", lyrics.syncType)
-        assertEquals(listOf("First line", "Second line"), lyrics.lines!!.map { it.words })
-        assertEquals(listOf("1123", "2456"), lyrics.lines!!.map { it.startTimeMs })
+        assertEquals(listOf("First line", "Second line"), lines.map { it.words })
+        assertEquals(listOf("1123", "2456"), lines.map { it.startTimeMs })
     }
 
     @Test
     fun malformedRichLyricsCannotHideUsableSyncedLyrics() {
-        val lyrics = response(rich = "unsupported rich text", synced = "[00:01.23]Visible line").toLyrics()!!
+        val lyrics = requireNotNull(response(rich = "unsupported rich text", synced = "[00:01.23]Visible line").toLyrics())
         assertEquals("LINE_SYNCED", lyrics.syncType)
-        assertEquals("Visible line", lyrics.lines!!.single().words)
+        assertEquals("Visible line", requireNotNull(lyrics.lines).single().words)
     }
 
     @Test
     fun malformedTimedLyricsFallBackToPlainText() {
-        val lyrics = response(rich = "unsupported rich text", synced = "unsupported timed text", plain = "Visible plain line").toLyrics()!!
+        val lyrics = requireNotNull(response(rich = "unsupported rich text", synced = "unsupported timed text", plain = "Visible plain line").toLyrics())
         assertEquals("UNSYNCED", lyrics.syncType)
-        assertEquals("Visible plain line", lyrics.lines!!.single().words)
+        assertEquals("Visible plain line", requireNotNull(lyrics.lines).single().words)
     }
 
     @Test

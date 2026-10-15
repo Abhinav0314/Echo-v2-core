@@ -21,7 +21,7 @@ import kotlin.test.assertFalse
 
 class LyricsRequestTest {
     @Test
-    fun blockedHtmlIsReportedAsHttp403BeforeAnyJsonDecode() = runBlocking {
+    fun blockedHtmlIsReportedAsHttp403BeforeAnyJsonDecode(): Unit = runBlocking {
         val engine = MockEngine {
             respond("<html>Sorry, you have been blocked</html>", HttpStatusCode.Forbidden, headersOf(HttpHeaders.ContentType, "text/html"))
         }
@@ -30,12 +30,12 @@ class LyricsRequestTest {
             val failure = assertIs<SimpMusicLyricsApiException>(result.exceptionOrNull())
             assertEquals(403, failure.code)
             assertEquals("Lyrics provider returned HTTP 403 (text/html)", failure.message)
-            assertFalse(failure.message!!.contains("BaseResponse"))
+            assertFalse(requireNotNull(failure.message).contains("BaseResponse"))
         }
     }
 
     @Test
-    fun successfulJsonStillDecodesTheNormalProviderEnvelope() = runBlocking {
+    fun successfulJsonStillDecodesTheNormalProviderEnvelope(): Unit = runBlocking {
         val engine = MockEngine {
             respond("""{"success":true,"data":["fixture"]}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json; charset=utf-8"))
         }
@@ -45,7 +45,7 @@ class LyricsRequestTest {
     }
 
     @Test
-    fun stalledProviderReturnsARequestFailureEligibleForFallback() = runBlocking {
+    fun stalledProviderReturnsARequestFailureEligibleForFallback(): Unit = runBlocking {
         val engine = MockEngine {
             delay(10_000L)
             respond("never reached")
