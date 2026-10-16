@@ -114,7 +114,7 @@ val repositoryModule =
         }
 
         single<UpdateRepository>(createdAtStart = true) {
-            UpdateRepositoryImpl { get() }
+            UpdateRepositoryImpl(get()) { get() }
         }
 
         single<AnalyticsRepository>(createdAtStart = true) {

@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.Serializable
 import live.vibescape.echo.EchoConfig
+import live.vibescape.echo.EchoReleaseIdentity
+import com.maxrave.common.AppIdentity
 
 @Serializable
 private data class EchoReleaseMetadata(
@@ -33,21 +35,32 @@ private data class EchoReleaseMetadata(
 )
 
 /** V2 releases have a separate catalog; the V1 client reads app_versions without filtering. */
-internal class UpdateRepositoryImpl(private val supabaseProvider: () -> SupabaseClient) : UpdateRepository {
+internal class UpdateRepositoryImpl(
+    private val appIdentity: AppIdentity,
+    private val supabaseProvider: () -> SupabaseClient,
+) : UpdateRepository {
     override fun checkForEchoUpdate(currentVersionCode: Int): Flow<Resource<UpdateData>> = flow<Resource<UpdateData>> {
         try {
             EchoDiagnostics.started(EchoOperation.UpdateCheck)
+            val channel = EchoReleaseIdentity.channelFor(appIdentity.applicationId, appIdentity.isDevBuild)
+            if (channel == null) {
+                EchoDiagnostics.succeeded(EchoOperation.UpdateCheck)
+                emit(Resource.Success(UpdateData(tagName = "", releaseTime = null, body = "", versionCode = currentVersionCode)))
+                return@flow
+            }
             val releases = supabaseProvider().postgrest[EchoConfig.RELEASE_CATALOG_TABLE].select {
-                filter { eq("application_id", EchoConfig.APPLICATION_ID); eq("release_channel", EchoConfig.RELEASE_CHANNEL); gt("version_code", currentVersionCode) }
+                filter { eq("application_id", appIdentity.applicationId); eq("release_channel", channel); gt("version_code", currentVersionCode) }
                 order("version_code", Order.DESCENDING)
             }.decodeList<EchoReleaseMetadata>()
-            val latest = releases.firstOrNull()
+            // Retain the identity boundary even if a backend responds with an unfiltered row.
+            val matching = releases.filter { it.application_id == appIdentity.applicationId && it.release_channel == channel }
+            val latest = matching.firstOrNull()
             EchoDiagnostics.succeeded(EchoOperation.UpdateCheck)
             emit(Resource.Success(latest?.let {
                 UpdateData(tagName = it.version_name, releaseTime = null, body = it.changelog_markdown,
                     apkUrl = it.apk_url, versionCode = it.version_code, apkSha256 = it.apk_sha256,
                     apkArmv7Url = it.apk_armv7_url, apkArmv7Sha256 = it.apk_armv7_sha256,
-                    forceUpdate = releases.any(EchoReleaseMetadata::force_update))
+                    forceUpdate = matching.any(EchoReleaseMetadata::force_update))
             } ?: UpdateData(tagName = "", releaseTime = null, body = "", versionCode = currentVersionCode)))
         } catch (cancelled: CancellationException) {
             throw cancelled

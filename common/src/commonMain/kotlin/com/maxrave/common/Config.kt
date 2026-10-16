@@ -10,7 +10,7 @@ import kotlinx.datetime.Month
 
 object Config {
     /** Android package identity is Echo's; Kotlin namespaces remain upstream-compatible. */
-    val OFFICIAL_PACKAGE_NAMES = setOf(live.vibescape.echo.EchoConfig.APPLICATION_ID, live.vibescape.echo.EchoConfig.DEBUG_APPLICATION_ID)
+    val OFFICIAL_PACKAGE_NAMES = setOf(live.vibescape.echo.EchoConfig.APPLICATION_ID, live.vibescape.echo.EchoConfig.DEBUG_APPLICATION_ID, live.vibescape.echo.EchoReleaseIdentity.VIVO_APPLICATION_ID)
 
     const val SPOTIFY_LOG_IN_URL: String = "https://accounts.spotify.com/en/login"
     const val SPOTIFY_ACCOUNT_URL = "https://accounts.spotify.com/en/status"

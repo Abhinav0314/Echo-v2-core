@@ -3,7 +3,6 @@ package com.maxrave.media3.utils
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.TypedValue
 import androidx.media3.common.util.BitmapLoader
@@ -13,10 +12,12 @@ import coil3.imageLoader
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
+import coil3.request.bitmapConfig
 import coil3.toBitmap
 import com.google.common.util.concurrent.ListenableFuture
 import com.maxrave.logger.Logger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.future
 import java.util.concurrent.ExecutionException
@@ -30,32 +31,43 @@ class CoilBitmapLoader(
     override fun supportsMimeType(mimeType: String): Boolean = true
 
     override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> =
-        coroutineScope.future(Dispatchers.IO) {
-            BitmapFactory.decodeByteArray(data, 0, data.size)
-                ?: error("Could not decode image data")
-        }
+        coroutineScope.future(Dispatchers.IO) { loadArtwork(data) }
 
     override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> =
         coroutineScope.future(Dispatchers.IO) {
-            val result =
-                (
-                    context.imageLoader.execute(
-                        ImageRequest
-                            .Builder(context)
-                            .data(uri)
-                            .allowHardware(false)
-                            .build(),
-                    )
-                )
-            if (result is ErrorResult) {
-                throw ExecutionException(result.throwable)
-            }
             try {
-                result.image?.toBitmap() ?: throw ExecutionException(NullPointerException())
-            } catch (e: Exception) {
-                throw ExecutionException(e)
+                loadArtwork(uri)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                // Not every video has max-resolution artwork. A 404 must not leave
+                // both the notification and the platform media session without a cover.
+                val fallback = youtubeArtworkFallback(uri) ?: throw failure
+                loadArtwork(fallback)
             }
         }
+
+    private suspend fun loadArtwork(data: Any): Bitmap {
+        val result = context.imageLoader.execute(
+            ImageRequest.Builder(context)
+                .data(data)
+                .allowHardware(false)
+                .bitmapConfig(Bitmap.Config.ARGB_8888)
+                .size(platformArtworkLimitPx(context))
+                .build(),
+        )
+        if (result is ErrorResult) throw ExecutionException(result.throwable)
+        return result.image?.toBitmap() ?: error("Artwork loader returned no bitmap")
+    }
+}
+
+internal fun youtubeArtworkFallback(uri: Uri): Uri? {
+    if (uri.scheme != "https" || uri.host != "i.ytimg.com") return null
+    val parts = uri.pathSegments
+    if (parts.size != 3 || parts[0] !in setOf("vi", "vi_webp") ||
+        !parts[1].matches(Regex("[A-Za-z0-9_-]{11}"))) return null
+    val fallback = Uri.parse("https://i.ytimg.com/vi/${parts[1]}/hqdefault.jpg")
+    return fallback.takeUnless { it == uri }
 }
 
 /**
