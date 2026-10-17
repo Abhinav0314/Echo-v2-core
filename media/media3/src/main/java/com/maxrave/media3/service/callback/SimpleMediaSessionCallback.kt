@@ -48,6 +48,7 @@ import com.maxrave.domain.utils.toSongEntity
 import com.maxrave.domain.utils.toTrack
 import com.maxrave.logger.Logger
 import com.maxrave.media3.R
+import com.maxrave.media3.service.MediaControllerAccess
 import com.maxrave.media3.extension.toMediaItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -79,12 +80,14 @@ internal class SimpleMediaSessionCallback(
     }
     private val searchTempList = mutableListOf<Track>()
     private val listHomeItem = mutableListOf<HomeItem>()
+    private val controllerAccess = MediaControllerAccess(context)
 
     override fun onConnect(
         session: MediaSession,
         controller: MediaSession.ControllerInfo,
     ): MediaSession.ConnectionResult {
         Logger.w(TAG, "onConnect: ${controller.packageName}")
+        if (!controllerAccess.allows(controller)) return MediaSession.ConnectionResult.reject()
         val sessionCommands =
             MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
@@ -118,6 +121,9 @@ internal class SimpleMediaSessionCallback(
         customCommand: SessionCommand,
         args: Bundle,
     ): ListenableFuture<SessionResult> {
+        if (!controllerAccess.allows(controller)) {
+            return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+        }
         when (customCommand.customAction) {
             MEDIA_CUSTOM_COMMAND.LIKE -> {
                 toggleLike()

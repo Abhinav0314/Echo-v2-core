@@ -2,7 +2,6 @@ package com.maxrave.media3.carapp
 
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.support.v4.media.session.MediaSessionCompat
 import androidx.car.app.CarAppService
@@ -36,15 +35,10 @@ import com.maxrave.media3.service.SimpleMediaService
  */
 @UnstableApi
 internal class SimpMusicCarAppService : CarAppService() {
-    override fun createHostValidator(): HostValidator =
-        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-            HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
-        } else {
-            HostValidator
-                .Builder(applicationContext)
-                .addAllowedHosts(androidx.car.app.R.array.hosts_allowlist_sample)
-                .build()
-        }
+    // Development packages can contain real accounts too: never bypass host signatures.
+    override fun createHostValidator(): HostValidator = HostValidator.Builder(applicationContext)
+        .addAllowedHosts(androidx.car.app.R.array.hosts_allowlist_sample)
+        .build()
 
     override fun onCreateSession(): Session = SimpMusicCarSession()
 }

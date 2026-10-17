@@ -84,7 +84,6 @@ import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.loadKoinModules
@@ -525,7 +524,7 @@ private fun provideCacheDataSource(
         ).setCacheWriteDataSinkFactory(null)
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
-/** The network underneath every player source: OkHttp behind the user's proxy, with header logging. */
+/** The network underneath every player source: OkHttp behind the user's proxy, without credential-bearing request logging. */
 @UnstableApi
 private fun provideHttpDataSourceFactory(
     context: Context,
@@ -540,11 +539,6 @@ private fun provideHttpDataSourceFactory(
                 .readTimeout(30.seconds)
                 .proxy(
                     proxy,
-                ).addInterceptor(
-                    HttpLoggingInterceptor()
-                        .apply {
-                            level = HttpLoggingInterceptor.Level.HEADERS
-                        },
                 ).build(),
         ),
     )

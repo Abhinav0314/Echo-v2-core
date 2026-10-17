@@ -38,9 +38,6 @@ import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.client.plugins.logging.DEFAULT
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.accept
 import io.ktor.client.request.get
@@ -179,10 +176,6 @@ class Ytmusic {
                 }
             }
             installSecureYouTubeRedirects()
-            install(Logging) {
-                logger = io.ktor.client.plugins.logging.Logger.DEFAULT
-                level = LogLevel.ALL
-            }
             install(ContentNegotiation) {
                 protobuf()
                 json(

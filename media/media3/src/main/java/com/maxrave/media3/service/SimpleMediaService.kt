@@ -40,6 +40,7 @@ internal class SimpleMediaService :
     private val coilBitmapLoader: CoilBitmapLoader by inject<CoilBitmapLoader>()
 
     private var mediaSession: MediaLibrarySession? = null
+    private val controllerAccess by lazy { MediaControllerAccess(this) }
 
     private val simpleMediaSessionCallback: MediaLibrarySession.Callback by inject<MediaLibrarySession.Callback>()
 
@@ -125,7 +126,8 @@ internal class SimpleMediaService :
         return super.onStartCommand(intent, flags, startId)
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
+        mediaSession.takeIf { controllerAccess.allows(controllerInfo) }
 
     @UnstableApi
     override fun onUpdateNotification(
