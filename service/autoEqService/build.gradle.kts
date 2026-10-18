@@ -13,7 +13,7 @@ val echoNativeTargetsEnabled = providers.gradleProperty("echo.enableNativeTarget
 
 kotlin {
     android {
-        namespace = "org.simpmusic.autoeq"
+        namespace = "org.abhinav.echo.autoeq"
         compileSdk = 37
         minSdk = 26
     }

@@ -1,5 +1,5 @@
 import club.vibescape.echo.contracts.*
-import com.maxrave.data.echo.*
+import com.abhinav.data.echo.*
 import kotlinx.serialization.json.*
 import androidx.room.Dao
 import androidx.room.Insert
@@ -10,41 +10,41 @@ import androidx.room.RawQuery
 import androidx.room.RoomRawQuery
 import androidx.room.Transaction
 import androidx.room.Update
-import com.maxrave.domain.data.entities.AlbumEntity
-import com.maxrave.domain.data.entities.ArtistEntity
-import com.maxrave.domain.data.entities.ArtistMotionEntity
-import com.maxrave.domain.data.entities.AutoEqCurveEntity
-import com.maxrave.domain.data.entities.AutoEqEntryEntity
-import com.maxrave.domain.data.entities.AutoEqIndexMetaEntity
-import com.maxrave.domain.data.entities.EpisodeEntity
-import com.maxrave.domain.data.entities.FollowedArtistSingleAndAlbum
-import com.maxrave.domain.data.entities.GoogleAccountEntity
-import com.maxrave.domain.data.entities.LocalPlaylistEntity
-import com.maxrave.domain.data.entities.LyricsEntity
-import com.maxrave.domain.data.entities.NewFormatEntity
-import com.maxrave.domain.data.entities.NotificationEntity
-import com.maxrave.domain.data.entities.PairSongLocalPlaylist
-import com.maxrave.domain.data.entities.PlaylistEntity
-import com.maxrave.domain.data.entities.PodcastWithEpisodes
-import com.maxrave.domain.data.entities.PodcastsEntity
-import com.maxrave.domain.data.entities.QueueEntity
-import com.maxrave.domain.data.entities.SearchHistory
-import com.maxrave.domain.data.entities.SetVideoIdEntity
-import com.maxrave.domain.data.entities.SongEntity
-import com.maxrave.domain.data.entities.SongInfoEntity
-import com.maxrave.domain.data.entities.TranslatedLyricsEntity
-import com.maxrave.domain.data.entities.YourYouTubePlaylistList
-import com.maxrave.domain.data.entities.analytics.EventArtistEntity
-import com.maxrave.domain.data.entities.analytics.PlaybackEventEntity
-import com.maxrave.domain.data.entities.analytics.query.DecadeCount
-import com.maxrave.domain.data.entities.analytics.query.PlaybackSample
-import com.maxrave.domain.data.entities.analytics.query.TopPlayedAlbum
-import com.maxrave.domain.data.entities.analytics.query.TopPlayedArtist
-import com.maxrave.domain.data.entities.analytics.query.TopPlayedArtistTime
-import com.maxrave.domain.data.entities.analytics.query.TopPlayedTracks
-import com.maxrave.domain.data.type.PlaylistType
-import com.maxrave.domain.data.type.RecentlyType
-import com.maxrave.domain.extension.now
+import com.abhinav.domain.data.entities.AlbumEntity
+import com.abhinav.domain.data.entities.ArtistEntity
+import com.abhinav.domain.data.entities.ArtistMotionEntity
+import com.abhinav.domain.data.entities.AutoEqCurveEntity
+import com.abhinav.domain.data.entities.AutoEqEntryEntity
+import com.abhinav.domain.data.entities.AutoEqIndexMetaEntity
+import com.abhinav.domain.data.entities.EpisodeEntity
+import com.abhinav.domain.data.entities.FollowedArtistSingleAndAlbum
+import com.abhinav.domain.data.entities.GoogleAccountEntity
+import com.abhinav.domain.data.entities.LocalPlaylistEntity
+import com.abhinav.domain.data.entities.LyricsEntity
+import com.abhinav.domain.data.entities.NewFormatEntity
+import com.abhinav.domain.data.entities.NotificationEntity
+import com.abhinav.domain.data.entities.PairSongLocalPlaylist
+import com.abhinav.domain.data.entities.PlaylistEntity
+import com.abhinav.domain.data.entities.PodcastWithEpisodes
+import com.abhinav.domain.data.entities.PodcastsEntity
+import com.abhinav.domain.data.entities.QueueEntity
+import com.abhinav.domain.data.entities.SearchHistory
+import com.abhinav.domain.data.entities.SetVideoIdEntity
+import com.abhinav.domain.data.entities.SongEntity
+import com.abhinav.domain.data.entities.SongInfoEntity
+import com.abhinav.domain.data.entities.TranslatedLyricsEntity
+import com.abhinav.domain.data.entities.YourYouTubePlaylistList
+import com.abhinav.domain.data.entities.analytics.EventArtistEntity
+import com.abhinav.domain.data.entities.analytics.PlaybackEventEntity
+import com.abhinav.domain.data.entities.analytics.query.DecadeCount
+import com.abhinav.domain.data.entities.analytics.query.PlaybackSample
+import com.abhinav.domain.data.entities.analytics.query.TopPlayedAlbum
+import com.abhinav.domain.data.entities.analytics.query.TopPlayedArtist
+import com.abhinav.domain.data.entities.analytics.query.TopPlayedArtistTime
+import com.abhinav.domain.data.entities.analytics.query.TopPlayedTracks
+import com.abhinav.domain.data.type.PlaylistType
+import com.abhinav.domain.data.type.RecentlyType
+import com.abhinav.domain.extension.now
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDateTime
@@ -52,7 +52,7 @@ import kotlinx.datetime.LocalDateTime
 /**
  * The album name older builds stored when they could not find a real one.
  *
- * Kept in step with the copy in [com.maxrave.data.db.datasource.LocalDataSource] and with the
+ * Kept in step with the copy in [com.abhinav.data.db.datasource.LocalDataSource] and with the
  * literal baked into [DatabaseDao.refreshAlbumIfPlaceholder]'s WHERE clause.
  */
 private const val PLACEHOLDER_ALBUM_NAME = "Album"
@@ -318,7 +318,7 @@ interface DatabaseDao {
      * Stores a batch of tracks in one transaction.
      *
      * Every other path inserts one song at a time through
-     * [com.maxrave.data.db.datasource.LocalDataSource.insertSong], which is right when a track
+     * [com.abhinav.data.db.datasource.LocalDataSource.insertSong], which is right when a track
      * arrives on its own but costs a commit each time. An import writes thousands in a row, so the
      * batch collapses them into a handful of commits instead.
      *

@@ -16,7 +16,7 @@ kotlin {
 android {
     // Run the same host tests against the variant shipped to Android users.
     testBuildType = "release"
-    namespace = "com.maxrave.media3"
+    namespace = "com.abhinav.media3"
     compileSdk = 37
 
     defaultConfig {
@@ -67,7 +67,8 @@ dependencies {
     implementation(libs.coil.network.okhttp)
 
     // Media3
-    implementation(libs.media3.exoplayer)
+    // Android component bridges expose these superclass types to the app/lint classpath.
+    api(libs.media3.exoplayer)
     api(libs.media3.session)
     implementation(libs.media3.exoplayer.dash)
     implementation(libs.media3.exoplayer.hls)
@@ -80,7 +81,7 @@ dependencies {
     implementation(libs.coroutines.android)
 
     // Android Auto (Car App Library media templates)
-    implementation(libs.car.app.core)
+    api(libs.car.app.core)
     implementation(libs.car.app.projected)
     // registerMediaPlaybackToken only accepts MediaSessionCompat.Token; both car-app
     // and media3-session ship androidx.media at runtime scope only

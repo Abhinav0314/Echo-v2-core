@@ -2,7 +2,7 @@ package com.my.kizzy
 
 import live.vibescape.echo.EchoConfig
 
-import com.maxrave.domain.data.entities.SongEntity
+import com.abhinav.domain.data.entities.SongEntity
 import com.my.kizzy.rpc.KizzyRPC
 import com.my.kizzy.rpc.RpcImage
 import kotlin.time.Clock

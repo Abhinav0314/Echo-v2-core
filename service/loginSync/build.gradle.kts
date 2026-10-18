@@ -9,7 +9,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "org.simpmusic.loginsync"
+        namespace = "org.abhinav.echo.loginsync"
         compileSdk = 37
         minSdk = 26
     }

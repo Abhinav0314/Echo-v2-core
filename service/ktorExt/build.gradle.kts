@@ -19,9 +19,11 @@ kotlin {
     // which platforms this KMP module supports.
     // See: https://kotlinlang.org/docs/multiplatform-discover-project.html#targets
     android {
-        namespace = "com.maxrave.ktorext"
+        namespace = "com.abhinav.ktorext"
         compileSdk = 37
         minSdk = 26
+        // Run the shared HTTP log-privacy test on Android as well as the JVM.
+        withHostTest {}
     }
 
     // For iOS targets, this is also where you should

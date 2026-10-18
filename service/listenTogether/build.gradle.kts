@@ -14,7 +14,7 @@ val echoNativeTargetsEnabled = providers.gradleProperty("echo.enableNativeTarget
 
 kotlin {
     android {
-        namespace = "org.simpmusic.listentogether"
+        namespace = "org.abhinav.echo.listentogether"
         compileSdk = 37
         minSdk = 26
         withHostTest {}

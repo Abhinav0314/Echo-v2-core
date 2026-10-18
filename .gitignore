@@ -28,3 +28,9 @@ replay_pid*
 
 # OMC (oh-my-claudecode) local state
 /.omc/
+# Editor scratch copies
+*.bak
+*.tmp
+
+# IDE output contains copied sources; never commit these duplicates
+**/bin/
