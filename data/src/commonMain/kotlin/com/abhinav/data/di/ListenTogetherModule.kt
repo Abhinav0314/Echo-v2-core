@@ -1,15 +1,13 @@
 package com.abhinav.data.di
 
 import com.abhinav.common.AppIdentity
+import club.vibescape.echo.contracts.EchoListenTogetherAuth
+import club.vibescape.echo.contracts.EchoSessionSource
 import com.abhinav.common.Config
 import com.abhinav.data.listentogether.ListenTogetherPlaybackBridge
-import com.abhinav.data.listentogether.ListenTogetherPrefs
 import com.abhinav.data.listentogether.ListenTogetherRepositoryImpl
 import com.abhinav.domain.repository.ListenTogetherRepository
-import com.abhinav.domain.manager.DataStoreManager
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import org.koin.core.qualifier.named
 import org.koin.dsl.bind
 import org.koin.dsl.module
@@ -30,10 +28,9 @@ val listenTogetherModule =
             ListenTogetherClient(
                 clientVersion = "Echo",
                 userAgent = get<AppIdentity>().userAgent,
-                // Read per connection attempt, so a server changed in settings applies next time.
-                serverUrl = {
-                    runBlocking { get<DataStoreManager>().getString(ListenTogetherPrefs.SERVER_URL).first().orEmpty() }
-                },
+                // Old custom/community-server preferences are deliberately not read:
+                // Echo account credentials must never be sent to those endpoints.
+                accessToken = { get<EchoListenTogetherAuth>().listenTogetherAccessToken() },
             )
         } bind ListenTogetherTransport::class
 
@@ -44,6 +41,7 @@ val listenTogetherModule =
             ListenTogetherRepositoryImpl(
                 session = get(),
                 scope = get<CoroutineScope>(named(Config.SERVICE_SCOPE)),
+                account = get<EchoSessionSource>(),
             )
         }
 

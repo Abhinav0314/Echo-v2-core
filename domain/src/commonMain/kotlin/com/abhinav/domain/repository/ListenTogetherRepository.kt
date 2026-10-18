@@ -22,11 +22,12 @@ interface ListenTogetherRepository {
 
     fun disconnect()
 
-    fun createRoom(username: String)
+    fun createRoom(username: String, password: String = "", autoJoin: Boolean = false)
 
     fun joinRoom(
         roomCode: String,
         username: String,
+        password: String = "",
     )
 
     /** Gives up on a join that has not been answered. Local only. */

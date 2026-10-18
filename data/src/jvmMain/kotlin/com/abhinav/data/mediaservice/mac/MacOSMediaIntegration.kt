@@ -780,7 +780,7 @@ class MacOSMediaIntegration private constructor() {
      */
     private fun downloadImageData(urlString: String): ByteArray? =
         try {
-            val url = URL(urlString)
+            val url = java.net.URI(urlString).toURL()
             url.openStream().use { it.readBytes() }
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to download image: ${e.message}")

@@ -1,6 +1,7 @@
 package com.abhinav.data.listentogether
 
 import com.abhinav.domain.data.model.listentogether.ListenTogetherRoom
+import club.vibescape.echo.contracts.EchoSessionSource
 import com.abhinav.domain.data.model.listentogether.RoomConnection
 import com.abhinav.domain.data.model.listentogether.RoomJoinRequest
 import com.abhinav.domain.data.model.listentogether.RoomMember
@@ -30,6 +31,7 @@ import org.abhinav.echo.listentogether.TrackInfo
 class ListenTogetherRepositoryImpl(
     private val session: ListenTogetherSession,
     scope: CoroutineScope,
+    account: EchoSessionSource? = null,
 ) : ListenTogetherRepository {
     private val _room = MutableStateFlow(ListenTogetherRoom())
     override val room: StateFlow<ListenTogetherRoom> = _room.asStateFlow()
@@ -48,24 +50,34 @@ class ListenTogetherRepositoryImpl(
 
     init {
         scope.launch { session.state.collect { _room.value = it.toDomain() } }
+        account?.let { source ->
+            scope.launch {
+                var owner = source.sessions.value
+                source.sessions.collect { next ->
+                    if (next != owner) session.disconnect()
+                    owner = next
+                }
+            }
+        }
     }
 
     override fun connect() = session.connect()
 
     override fun disconnect() = session.disconnect()
 
-    override fun createRoom(username: String) {
-        session.createRoom(username)
+    override fun createRoom(username: String, password: String, autoJoin: Boolean) {
+        session.createRoom(username, password, autoJoin)
     }
 
     override fun joinRoom(
         roomCode: String,
         username: String,
+        password: String,
     ) {
-        session.joinRoom(roomCode, username)
+        session.joinRoom(roomCode, username, password)
     }
 
-    override fun cancelJoin() = session.cancelJoin()
+    override fun cancelJoin() { session.cancelJoin() }
 
     override fun leaveRoom() {
         session.leaveRoom()

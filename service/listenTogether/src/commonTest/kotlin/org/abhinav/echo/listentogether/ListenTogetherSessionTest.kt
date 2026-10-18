@@ -32,6 +32,24 @@ class ListenTogetherSessionTest {
     }
 
     @Test
+    fun cancellingAJoinPreventsALateApprovalFromRestoringTheRoom() = runBlocking {
+        val transport = Transport()
+        val session = ListenTogetherSession(transport, Dispatchers.Unconfined)
+        try {
+            session.connect()
+            transport.events.emit(ListenTogetherEvent.Connected("1", true, false))
+            session.joinRoom("ABCD1234", "Listener", "room-password").join()
+            session.joinRoom("ABCD1234", "Listener", "room-password").join()
+            assertEquals(1, transport.sent.count { it.first == MessageTypes.JOIN_ROOM })
+            session.cancelJoin().join()
+            transport.message(MessageTypes.JOIN_APPROVED, JoinApprovedPayload(roomCode = "ABCD1234", userId = "guest"))
+            assertFalse(session.state.value.inRoom)
+            assertTrue(transport.sent.any { it.first == MessageTypes.LEAVE_ROOM })
+            assertTrue(transport.forgotten)
+        } finally { session.release() }
+    }
+
+    @Test
     fun repeatedConnectDoesNotLeaveAConnectedRoomStuckConnecting() = runBlocking {
         val transport = Transport()
         val session = ListenTogetherSession(transport, Dispatchers.Unconfined)

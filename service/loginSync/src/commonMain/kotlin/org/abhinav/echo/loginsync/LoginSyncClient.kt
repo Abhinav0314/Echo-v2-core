@@ -121,9 +121,7 @@ class LoginSyncClient {
                 setBody(LoginSyncCipher.seal(code.key, LoginSyncWire.aad(kind, reply = false), plain))
             }
         when (response.status) {
-            HttpStatusCode.OK -> {
-                Unit
-            }
+            HttpStatusCode.OK -> {}
 
             HttpStatusCode.Forbidden, HttpStatusCode.Gone -> {
                 throw LoginSyncTransportException(LoginSyncTransportException.Kind.REFUSED, "HTTP ${response.status.value}")

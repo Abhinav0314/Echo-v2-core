@@ -159,12 +159,15 @@ data class RoomState(
 @Serializable
 data class CreateRoomPayload(
     @ProtoNumber(1) val username: String = "",
+    @ProtoNumber(2) val password: String = "",
+    @ProtoNumber(3) val autoJoin: Boolean = false,
 )
 
 @Serializable
 data class JoinRoomPayload(
     @ProtoNumber(1) val roomCode: String = "",
     @ProtoNumber(2) val username: String = "",
+    @ProtoNumber(3) val password: String = "",
 )
 
 @Serializable

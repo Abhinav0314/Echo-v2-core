@@ -63,7 +63,7 @@ class BraveNewPipeDownloaderImpl(
             throw ReCaptchaException("reCaptcha Challenge requested", request.url())
         }
 
-        val body = response.body?.string()
+        val body = response.body.string()
         return Response(
             response.code,
             response.message,

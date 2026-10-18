@@ -229,10 +229,10 @@ class ListenTogetherSession(
         _state.value = ListenTogetherState()
     }
 
-    fun createRoom(username: String) =
+    fun createRoom(username: String, password: String = "", autoJoin: Boolean = false) =
         launch {
             pendingUsername = username.trim()
-            if (!client.send(MessageTypes.CREATE_ROOM, CreateRoomPayload(username = pendingUsername))) {
+            if (!client.send(MessageTypes.CREATE_ROOM, CreateRoomPayload(username = pendingUsername, password = password, autoJoin = autoJoin))) {
                 _state.update { it.copy(error = "Not connected") }
             }
         }
@@ -240,18 +240,25 @@ class ListenTogetherSession(
     fun joinRoom(
         roomCode: String,
         username: String,
-    ) = launch {
-        pendingUsername = username.trim()
+        password: String = "",
+    ): Job {
         val code = roomCode.trim().uppercase()
-        _state.update { it.copy(pendingJoinCode = code, error = null) }
-        val sent = client.send(MessageTypes.JOIN_ROOM, JoinRoomPayload(roomCode = code, username = pendingUsername))
-        if (!sent) {
-            _state.update { it.copy(pendingJoinCode = null, error = "Not connected") }
+        val previous = _state.value
+        if (previous.inRoom || previous.pendingJoinCode != null) return CompletableDeferred(Unit)
+        if (!_state.compareAndSet(previous, previous.copy(pendingJoinCode = code, error = null))) return CompletableDeferred(Unit)
+        return launch {
+            pendingUsername = username.trim()
+            val sent = client.send(MessageTypes.JOIN_ROOM, JoinRoomPayload(roomCode = code, username = pendingUsername, password = password))
+            if (!sent) _state.update { it.copy(pendingJoinCode = null, error = "Not connected") }
         }
     }
 
-    /** Gives up on a join that has not been answered. Local only — the server needs no message. */
-    fun cancelJoin() = _state.update { it.copy(pendingJoinCode = null) }
+    /** Cancel on the server too; a late approval must not resurrect a left room. */
+    fun cancelJoin(): Job {
+        _state.update { ListenTogetherState(connection = it.connection) }
+        client.forgetRoomSession()
+        return launch(start = CoroutineStart.UNDISPATCHED) { client.send(MessageTypes.LEAVE_ROOM, LeaveRoomPayload()) }
+    }
 
     fun leaveRoom() =
         launch {
@@ -421,6 +428,10 @@ class ListenTogetherSession(
 
             MessageTypes.JOIN_APPROVED -> {
                 val p = payload as? JoinApprovedPayload ?: return
+                if (_state.value.pendingJoinCode != p.roomCode) {
+                    if (!_state.value.inRoom && _state.value.pendingJoinCode == null) client.forgetRoomSession()
+                    return
+                }
                 // Ask for the current state explicitly: JoinApproved carries whatever the server
                 // last heard, which is nothing at all if the host has not issued a command yet.
                 launch { client.send(MessageTypes.REQUEST_SYNC, null) }
@@ -502,12 +513,15 @@ class ListenTogetherSession(
                 }
             }
 
-            MessageTypes.KICKED ->
+            MessageTypes.KICKED -> {
+                client.forgetRoomSession()
                 _state.value =
                     ListenTogetherState(
                         connection = _state.value.connection,
                         error = "You were removed from the room. Ask the host before joining again.",
                     )
+
+            }
 
             MessageTypes.BUFFER_WAIT -> {
                 val p = payload as? BufferWaitPayload ?: return
@@ -557,7 +571,7 @@ class ListenTogetherSession(
                 val p = payload as? ErrorPayload ?: return
                 // `rate_limited` is about one message, not the session, and showing it would put an
                 // alarming banner up for something the user cannot act on.
-                if (p.code != "rate_limited") {
+                run {
                     Logger.w(TAG, "Listen Together request failed")
                     // An error while waiting to be let in ends that wait — most often a bad code.
                     val message = listenTogetherErrorMessage(p.code)

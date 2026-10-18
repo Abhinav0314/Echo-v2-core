@@ -12,6 +12,7 @@ package org.abhinav.echo.listentogether
 import com.abhinav.ktorext.getEngine
 import com.abhinav.logger.Logger
 import io.ktor.client.HttpClient
+import io.ktor.http.HttpHeaders
 import io.ktor.client.plugins.UserAgent
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
@@ -102,6 +103,7 @@ class ListenTogetherClient(
      * settings takes effect on the next connect instead of needing the screen to be recreated.
      */
     private val serverUrl: () -> String = { DEFAULT_SERVER_URL },
+    private val accessToken: suspend () -> String? = { null },
     /**
      * MUST be monotonic — [ServerClock] compares it against itself. The default is Kotlin's own
      * monotonic source, which needs no expect/actual; a platform with a better one (Android's
@@ -114,11 +116,7 @@ class ListenTogetherClient(
 ) : CoroutineScope, ListenTogetherTransport {
     override val coroutineContext: CoroutineContext = SupervisorJob() + dispatcher
 
-    private val client: HttpClient =
-        HttpClient(getEngine()) {
-            install(UserAgent) { agent = userAgent }
-            install(WebSockets)
-        }
+    private val client: HttpClient = echoRoomHttpClient(userAgent)
 
     private val serverClock = ServerClock(elapsedRealtime)
 
@@ -139,6 +137,7 @@ class ListenTogetherClient(
     private var reconnectAttempts = 0
     /** Set when the server tells us retrying cannot help — see [MessageTypes.ERROR] handling. */
     private var fatal = false
+    private var fatalReason = "This server could not accept the connection."
 
     /** True between a completed handshake and the socket going down. */
     val isConnected: Boolean
@@ -240,7 +239,20 @@ class ListenTogetherClient(
     private suspend fun openAndRun() {
         val url = serverUrl().ifBlank { DEFAULT_SERVER_URL }
         Logger.i(TAG, "Connecting to Listen Together")
-        val live = client.webSocketSession(url)
+        // Validate before even requesting a credential. Exact equality rejects
+        // lookalike hosts, user-info, ports, query strings and alternate schemes.
+        if (!isTrustedEchoRoomServer(url)) {
+            fatal = true
+            fatalReason = "Use the official Echo server to listen together."
+            return
+        }
+        val token = accessToken()
+        if (token.isNullOrBlank()) {
+            fatal = true
+            fatalReason = "Sign in to your Echo account to listen together."
+            return
+        }
+        val live = client.webSocketSession(urlString = url) { headers.append(HttpHeaders.Authorization, "Bearer $token") }
         session = live
         codec = MessageCodec(compressionEnabled = true)
         serverClock.reset()
@@ -408,7 +420,7 @@ class ListenTogetherClient(
 
     private suspend fun scheduleReconnect(): Boolean {
         if (fatal) {
-            _events.emit(ListenTogetherEvent.Disconnected("Server rejected this client", willRetry = false))
+            _events.emit(ListenTogetherEvent.Disconnected(fatalReason, willRetry = false))
             return false
         }
 
@@ -436,12 +448,8 @@ class ListenTogetherClient(
     }
 
     companion object {
-        /**
-         * The one public server, run by "Nyx" and already shared by several Metrolist forks.
-         * Rooms are only shared by clients pointed at the SAME server, so this default is what
-         * makes SimpMusic interoperable out of the box.
-         */
-        const val DEFAULT_SERVER_URL = "wss://metroserverx.meowery.eu/ws"
+        /** Echo account credentials are restricted to this exact WSS endpoint. */
+        const val DEFAULT_SERVER_URL = "wss://listen.echo.vibescape.club/ws"
 
         /** Anchors the default monotonic source; see [elapsedRealtime]. */
         private val PROCESS_START = TimeSource.Monotonic.markNow()
@@ -475,4 +483,13 @@ class ListenTogetherClient(
         private val NON_RECOVERABLE_ERROR_CODES = setOf("unsupported_client")
         internal val EXPIRED_ROOM_ERROR_CODES = setOf("session_not_found", "session_expired", "room_not_found")
     }
+}
+
+/** No account token may be forwarded to a custom or redirected endpoint. */
+internal fun isTrustedEchoRoomServer(url: String): Boolean = url == ListenTogetherClient.DEFAULT_SERVER_URL
+
+internal fun echoRoomHttpClient(userAgent: String): HttpClient = HttpClient(getEngine()) {
+    followRedirects = false
+    install(UserAgent) { agent = userAgent }
+    install(WebSockets)
 }
