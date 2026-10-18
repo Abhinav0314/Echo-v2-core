@@ -21,7 +21,7 @@ import live.vibescape.echo.EchoReleaseIdentity
 import com.maxrave.common.AppIdentity
 
 @Serializable
-private data class EchoReleaseMetadata(
+internal data class EchoReleaseMetadata(
     val version_code: Int,
     val version_name: String,
     val changelog_markdown: String = "",
@@ -32,6 +32,14 @@ private data class EchoReleaseMetadata(
     val application_id: String,
     val release_channel: String,
     val force_update: Boolean = false,
+    val created_at: String? = null,
+)
+
+internal fun EchoReleaseMetadata.toUpdateData(forceUpdate: Boolean) = UpdateData(
+    tagName = version_name, releaseTime = created_at, body = changelog_markdown,
+    apkUrl = apk_url, versionCode = version_code, apkSha256 = apk_sha256,
+    apkArmv7Url = apk_armv7_url, apkArmv7Sha256 = apk_armv7_sha256,
+    forceUpdate = forceUpdate,
 )
 
 /** V2 releases have a separate catalog; the V1 client reads app_versions without filtering. */
@@ -56,12 +64,8 @@ internal class UpdateRepositoryImpl(
             val matching = releases.filter { it.application_id == appIdentity.applicationId && it.release_channel == channel }
             val latest = matching.firstOrNull()
             EchoDiagnostics.succeeded(EchoOperation.UpdateCheck)
-            emit(Resource.Success(latest?.let {
-                UpdateData(tagName = it.version_name, releaseTime = null, body = it.changelog_markdown,
-                    apkUrl = it.apk_url, versionCode = it.version_code, apkSha256 = it.apk_sha256,
-                    apkArmv7Url = it.apk_armv7_url, apkArmv7Sha256 = it.apk_armv7_sha256,
-                    forceUpdate = matching.any(EchoReleaseMetadata::force_update))
-            } ?: UpdateData(tagName = "", releaseTime = null, body = "", versionCode = currentVersionCode)))
+            emit(Resource.Success(latest?.toUpdateData(matching.any(EchoReleaseMetadata::force_update))
+                ?: UpdateData(tagName = "", releaseTime = null, body = "", versionCode = currentVersionCode)))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
