@@ -12,6 +12,9 @@ class EchoUpdatePolicyTest {
         assertTrue(isTrustedEchoApkUrl(backend + releasePath, backend))
         assertTrue(isTrustedEchoApkUrl("$backend:443${releasePath.replace(".apk", "-armv7.apk")}", "$backend/"))
         assertFalse(isTrustedEchoApkUrl(backend + releasePath))
+        for (suffix in listOf("", "-armv7", "-vivo")) {
+            assertTrue(isTrustedEchoApkUrl("$backend/storage/v1/object/public/releases/echo-v2/build-2000010-echo-2.0.0$suffix.apk", backend))
+        }
     }
 
     @Test fun otherProjectsBucketsAndSignedAssetsCannotBorrowProjectTrust() {
