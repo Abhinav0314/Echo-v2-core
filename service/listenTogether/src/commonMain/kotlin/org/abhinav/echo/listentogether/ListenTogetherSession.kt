@@ -84,6 +84,8 @@ data class ListenTogetherState(
      * happened.
      */
     val pendingJoinCode: String? = null,
+    /** Password challenge for this pending room only; never inferred from remote message text. */
+    val passwordRequiredRoomCode: String? = null,
     /** Set once and cleared by the UI, so a transient failure cannot wedge the screen. */
     val error: String? = null,
     /** Title of the explicitly published queue; ordinary transport commands can omit it. */
@@ -147,6 +149,7 @@ internal fun ListenTogetherState.applyReconnected(payload: ReconnectedPayload) =
     joinRequests = emptyList(),
     suggestions = emptyList(),
     pendingJoinCode = null,
+    passwordRequiredRoomCode = null,
     error = null,
 )
 
@@ -226,6 +229,10 @@ class ListenTogetherSession(
 
     fun disconnect() {
         client.disconnect()
+        // Stop consuming the cancelled attempt before resetting the UI. A handshake
+        // already queued by that attempt must not turn Cancel back into Connected.
+        pump?.cancel()
+        pump = null
         _state.value = ListenTogetherState()
     }
 
@@ -245,7 +252,7 @@ class ListenTogetherSession(
         val code = roomCode.trim().uppercase()
         val previous = _state.value
         if (previous.inRoom || previous.pendingJoinCode != null) return CompletableDeferred(Unit)
-        if (!_state.compareAndSet(previous, previous.copy(pendingJoinCode = code, error = null))) return CompletableDeferred(Unit)
+        if (!_state.compareAndSet(previous, previous.copy(pendingJoinCode = code, passwordRequiredRoomCode = null, error = null))) return CompletableDeferred(Unit)
         return launch {
             pendingUsername = username.trim()
             val sent = client.send(MessageTypes.JOIN_ROOM, JoinRoomPayload(roomCode = code, username = pendingUsername, password = password))
@@ -399,7 +406,7 @@ class ListenTogetherSession(
                     } else {
                         // Losing the socket loses the room with it; leaving the room UI up would
                         // offer controls that silently do nothing.
-                        ListenTogetherState(connection = ConnectionState.Failed("Couldn't reconnect. Check your connection and try again."))
+                        ListenTogetherState(connection = ConnectionState.Failed(listenTogetherConnectionErrorMessage(event.reason)))
                     }
                 }
 
@@ -441,6 +448,7 @@ class ListenTogetherSession(
                         selfUserId = p.userId,
                         isHost = false,
                         pendingJoinCode = null,
+                        passwordRequiredRoomCode = null,
                         members = p.state?.users.orEmpty().map { u -> u.toMember() },
                         queue = p.state?.queue.orEmpty(),
                         // RoomState has no title field; never reuse another room's queue name.
@@ -458,6 +466,7 @@ class ListenTogetherSession(
                 _state.update {
                     it.copy(
                         pendingJoinCode = null,
+                        passwordRequiredRoomCode = null,
                         error = "The host declined your request to join this room.",
                     )
                 }
@@ -572,14 +581,19 @@ class ListenTogetherSession(
                 // `rate_limited` is about one message, not the session, and showing it would put an
                 // alarming banner up for something the user cannot act on.
                 run {
-                    Logger.w(TAG, "Listen Together request failed")
                     // An error while waiting to be let in ends that wait — most often a bad code.
                     val message = listenTogetherErrorMessage(p.code)
+                    Logger.w(TAG, message)
                     _state.update {
                         if (p.code in ListenTogetherClient.EXPIRED_ROOM_ERROR_CODES || (p.code == "host_not_allowed" && it.connection is ConnectionState.Connecting)) {
                             ListenTogetherState(connection = ConnectionState.Connected(serverVersion), error = message)
                         } else {
-                            it.copy(pendingJoinCode = null, error = message)
+                            val passwordChallenge = it.pendingJoinCode != null && p.code in setOf("password_required", "password_incorrect")
+                            it.copy(
+                                pendingJoinCode = null,
+                                passwordRequiredRoomCode = if (passwordChallenge) it.pendingJoinCode else null,
+                                error = if (passwordChallenge && p.code == "password_required") null else message,
+                            )
                         }
                     }
                 }

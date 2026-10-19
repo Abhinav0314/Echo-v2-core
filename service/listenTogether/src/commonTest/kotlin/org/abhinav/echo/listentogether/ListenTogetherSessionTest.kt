@@ -11,14 +11,54 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ListenTogetherSessionTest {
+    @Test
+    fun passwordPromptIsScopedToPendingRoomAndClearsAfterSuccessfulJoin() = runBlocking {
+        val transport = Transport()
+        val session = ListenTogetherSession(transport, Dispatchers.Unconfined)
+        try {
+            session.connect()
+            transport.events.emit(ListenTogetherEvent.Connected("1", true, false))
+            session.joinRoom("ABCD1234", "Guest").join()
+            transport.message(MessageTypes.ERROR, ErrorPayload("password_required", "untrusted server text"))
+            assertEquals("ABCD1234", session.state.value.passwordRequiredRoomCode)
+            assertEquals(null, session.state.value.pendingJoinCode)
+            assertEquals(null, session.state.value.error)
+            session.joinRoom("ABCD1234", "Guest", "wrong password").join()
+            transport.message(MessageTypes.ERROR, ErrorPayload("password_incorrect", "private password details"))
+            assertEquals("ABCD1234", session.state.value.passwordRequiredRoomCode)
+            assertFalse(session.state.value.error.orEmpty().contains("private"))
+            session.joinRoom("ABCD1234", "Guest", "correct password").join()
+            transport.message(MessageTypes.JOIN_APPROVED, JoinApprovedPayload(roomCode = "ABCD1234", userId = "guest"))
+            assertTrue(session.state.value.inRoom)
+            assertEquals(null, session.state.value.passwordRequiredRoomCode)
+        } finally { session.release() }
+    }
+
+    @Test
+    fun unprotectedRoomJoinsWithoutPasswordPromptAndUnsolicitedChallengesCannotSelectARoom() = runBlocking {
+        val transport = Transport()
+        val session = ListenTogetherSession(transport, Dispatchers.Unconfined)
+        try {
+            session.connect()
+            transport.events.emit(ListenTogetherEvent.Connected("1", true, false))
+            transport.message(MessageTypes.ERROR, ErrorPayload("password_required", "private room"))
+            assertEquals(null, session.state.value.passwordRequiredRoomCode)
+            session.joinRoom("OPEN1234", "Guest").join()
+            transport.message(MessageTypes.JOIN_APPROVED, JoinApprovedPayload(roomCode = "OPEN1234", userId = "guest"))
+            assertTrue(session.state.value.inRoom)
+            assertEquals(null, session.state.value.passwordRequiredRoomCode)
+        } finally { session.release() }
+    }
+
     private class Transport : ListenTogetherTransport {
         override val events = MutableSharedFlow<ListenTogetherEvent>()
         val sent = mutableListOf<Pair<String, Any?>>()
         var connections = 0
+        var disconnections = 0
         var forgotten = false
         var holdChangeTrack: CompletableDeferred<Unit>? = null
         override fun connect() { connections++ }
-        override fun disconnect() = Unit
+        override fun disconnect() { disconnections++ }
         override fun release() = Unit
         override fun forgetRoomSession() { forgotten = true }
         override fun serverNow(): Long = 1000L
@@ -29,6 +69,39 @@ class ListenTogetherSessionTest {
             return true
         }
         suspend fun message(type: String, payload: Any?) = events.emit(ListenTogetherEvent.Message(type, payload))
+    }
+
+    @Test
+    fun connectionErrorsGiveOwnedGuidanceWithoutExposingRemoteDetails() = runBlocking {
+        val transport = Transport()
+        val session = ListenTogetherSession(transport, Dispatchers.Unconfined)
+        try {
+            session.connect()
+            transport.events.emit(ListenTogetherEvent.Disconnected("Sign in to your Echo account to listen together.", false))
+            assertEquals(ConnectionState.Failed("Sign in to your Echo account to listen together."), session.state.value.connection)
+            transport.events.emit(ListenTogetherEvent.Disconnected("trace: token=private-secret", false))
+            val failed = session.state.value.connection as ConnectionState.Failed
+            assertFalse(failed.reason.contains("private-secret"))
+            assertTrue(failed.reason.contains("try again"))
+        } finally { session.release() }
+    }
+
+    @Test
+    fun cancellingAnInitialConnectionAllowsAnImmediateFreshAttempt() = runBlocking {
+        val transport = Transport()
+        val session = ListenTogetherSession(transport, Dispatchers.Unconfined)
+        try {
+            session.connect()
+            assertEquals(ConnectionState.Connecting, session.state.value.connection)
+            session.disconnect()
+            transport.events.emit(ListenTogetherEvent.Connected("late", true, false))
+            assertEquals(ConnectionState.Disconnected, session.state.value.connection)
+            assertEquals(1, transport.disconnections)
+            session.connect()
+            assertEquals(2, transport.connections)
+            transport.events.emit(ListenTogetherEvent.Connected("1", true, false))
+            assertTrue(session.state.value.isConnected)
+        } finally { session.release() }
     }
 
     @Test

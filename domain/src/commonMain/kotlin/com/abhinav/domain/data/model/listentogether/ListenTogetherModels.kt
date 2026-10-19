@@ -66,6 +66,7 @@ data class ListenTogetherRoom(
     val waitingFor: List<String> = emptyList(),
     /** The code we asked to join and have not heard back about. */
     val pendingJoinCode: String? = null,
+    val passwordRequiredRoomCode: String? = null,
     val error: String? = null,
 ) {
     val inRoom: Boolean get() = roomCode != null

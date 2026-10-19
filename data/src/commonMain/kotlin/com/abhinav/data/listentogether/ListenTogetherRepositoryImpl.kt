@@ -133,6 +133,7 @@ private fun ListenTogetherState.toDomain() =
         position = position,
         waitingFor = waitingFor,
         pendingJoinCode = pendingJoinCode,
+        passwordRequiredRoomCode = passwordRequiredRoomCode,
         error = error,
     )
 

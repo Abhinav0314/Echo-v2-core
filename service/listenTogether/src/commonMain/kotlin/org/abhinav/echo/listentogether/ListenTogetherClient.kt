@@ -39,6 +39,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -183,6 +185,9 @@ class ListenTogetherClient(
                 while (isActive) {
                     try {
                         openAndRun()
+                    } catch (_: TimeoutCancellationException) {
+                        // An attempt timing out is retryable, unlike the user's Cancel action.
+                        Logger.w(TAG, "Listen Together connection timed out")
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -246,13 +251,17 @@ class ListenTogetherClient(
             fatalReason = "Use the official Echo server to listen together."
             return
         }
-        val token = accessToken()
+        val token = withTimeout(15_000L) { accessToken() }
         if (token.isNullOrBlank()) {
             fatal = true
             fatalReason = "Sign in to your Echo account to listen together."
             return
         }
-        val live = client.webSocketSession(urlString = url) { headers.append(HttpHeaders.Authorization, "Bearer $token") }
+        // Render can need a cold start, but a failed HTTP upgrade must not leave the
+        // screen connecting forever. The timeout ends before the long-lived socket loop.
+        val live = withTimeout(75_000L) {
+            client.webSocketSession(urlString = url) { headers.append(HttpHeaders.Authorization, "Bearer $token") }
+        }
         session = live
         codec = MessageCodec(compressionEnabled = true)
         serverClock.reset()
