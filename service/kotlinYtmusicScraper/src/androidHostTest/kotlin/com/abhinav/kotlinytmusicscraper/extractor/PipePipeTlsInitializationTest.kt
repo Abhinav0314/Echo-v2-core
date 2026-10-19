@@ -10,8 +10,18 @@ import dev.maxrave.pipepipe.extractor.localization.Localization
 import javax.net.ssl.HttpsURLConnection
 import kotlin.test.Test
 import kotlin.test.assertSame
+import kotlin.test.assertEquals
 
 class PipePipeTlsInitializationTest {
+    @Test fun reviewedSdkPlayerClientsRemainSupported() {
+        val before = NewPipe.getYoutubePlayerClient()
+        try {
+            NewPipe.setYoutubePlayerClient("tv_samsung")
+            assertEquals("tv_samsung", NewPipe.getYoutubePlayerClient())
+        } finally {
+            NewPipe.setYoutubePlayerClient(before)
+        }
+    }
     private val downloader = object : Downloader() {
         override fun execute(request: Request): Response =
             error("Extractor initialization must not issue a network request")

@@ -38,6 +38,7 @@ import com.abhinav.domain.data.entities.analytics.EventArtistEntity
 import com.abhinav.domain.data.entities.analytics.PlaybackEventEntity
 import com.abhinav.domain.data.entities.analytics.query.DecadeCount
 import com.abhinav.domain.data.entities.analytics.query.PlaybackSample
+import com.abhinav.domain.data.entities.analytics.query.SongPlaySample
 import com.abhinav.domain.data.entities.analytics.query.TopPlayedAlbum
 import com.abhinav.domain.data.entities.analytics.query.TopPlayedArtist
 import com.abhinav.domain.data.entities.analytics.query.TopPlayedArtistTime
@@ -45,6 +46,7 @@ import com.abhinav.domain.data.entities.analytics.query.TopPlayedTracks
 import com.abhinav.domain.data.type.PlaylistType
 import com.abhinav.domain.data.type.RecentlyType
 import com.abhinav.domain.extension.now
+import com.abhinav.domain.utils.LIVE_RESULT_TYPE
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDateTime
@@ -256,10 +258,7 @@ interface DatabaseDao {
 
     // Song
     @Query("SELECT * FROM song ORDER BY inLibrary DESC LIMIT :limit OFFSET :offset")
-    suspend fun getRecentSongs(
-        limit: Int,
-        offset: Int,
-    ): List<SongEntity>
+    suspend fun getRecentSongs(limit: Int, offset: Int): List<SongEntity>
 
     @Query("SELECT * FROM song ORDER BY inLibrary DESC LIMIT :limit OFFSET 0")
     suspend fun getAllSongs(limit: Int): List<SongEntity>
@@ -421,6 +420,15 @@ interface DatabaseDao {
         videoId: String,
     ): Int
 
+    // `resultType` doubles as the live marker (LIVE_RESULT_TYPE). insertSong is IGNORE, so a row
+    // that already exists only learns it is live through these.
+    @Query("UPDATE song SET resultType = '$LIVE_RESULT_TYPE' WHERE videoId = :videoId")
+    suspend fun markSongLive(videoId: String): Int
+
+    // Clears the marker and nothing else: a row whose resultType holds some other label keeps it.
+    @Query("UPDATE song SET resultType = NULL WHERE videoId = :videoId AND resultType = '$LIVE_RESULT_TYPE'")
+    suspend fun unmarkSongLive(videoId: String): Int
+
     @Query("SELECT * FROM song WHERE totalPlayTime > 1 ORDER BY totalPlayTime DESC LIMIT 50")
     fun getMostPlayedSongs(): Flow<List<SongEntity>>
 
@@ -450,6 +458,25 @@ interface DatabaseDao {
         videoId: String,
         downloadedAt: LocalDateTime? = if (downloadState == 3) now() else null,
     )
+
+    /** Songs holding [category], oldest download first. One still downloading has no date yet and sorts last. */
+    @Query("SELECT * FROM song WHERE category = :category ORDER BY downloadedAt IS NULL, downloadedAt")
+    suspend fun getSongsByCategory(category: String): List<SongEntity>
+
+    /** Returns how many rows changed, so a caller can tell the song row is gone. */
+    @Query("UPDATE song SET category = :category WHERE videoId = :videoId")
+    suspend fun updateSongCategory(
+        category: String?,
+        videoId: String,
+    ): Int
+
+    /** Drops [category] from songs that are no longer downloaded: removed by hand, or failed. */
+    @Query("UPDATE song SET category = NULL WHERE category = :category AND downloadState = 0")
+    suspend fun clearCategoryFromNotDownloaded(category: String): Int
+
+    /** Drops [category] from liked songs: the user keeps those once liked songs are auto-downloaded. */
+    @Query("UPDATE song SET category = NULL WHERE category = :category AND liked = 1")
+    suspend fun clearCategoryFromLiked(category: String): Int
 
     @Query("UPDATE song SET durationSeconds = :durationSeconds WHERE videoId = :videoId")
     suspend fun updateDurationSeconds(
@@ -1549,6 +1576,10 @@ interface DatabaseDao {
         startTimestamp: LocalDateTime,
         endTimestamp: LocalDateTime,
     ): List<PlaybackSample>
+
+    /** Every play since [from], for the Smart downloads score. */
+    @Query("SELECT videoId, timestamp, durationSecond, listenedSecond FROM playback_event WHERE timestamp >= :from")
+    suspend fun getSongPlaysSince(from: LocalDateTime): List<SongPlaySample>
 
     @Query(
         "SELECT COUNT(DISTINCT videoId) FROM playback_event" +

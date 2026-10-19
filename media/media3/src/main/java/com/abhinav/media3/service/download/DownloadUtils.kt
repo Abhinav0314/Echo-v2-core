@@ -20,11 +20,14 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.abhinav.common.MERGING_DATA_TYPE
 import com.abhinav.domain.data.entities.DownloadState
+import com.abhinav.domain.data.entities.SongEntity
+import com.abhinav.domain.data.player.LiveStreamRegistry
 import com.abhinav.domain.extension.now
 import com.abhinav.domain.manager.DataStoreManager
 import com.abhinav.domain.mediaservice.handler.DownloadHandler
 import com.abhinav.domain.repository.SongRepository
 import com.abhinav.domain.repository.StreamRepository
+import com.abhinav.domain.utils.isLive
 import com.abhinav.logger.Logger
 import com.abhinav.media3.extension.isFullyCached
 import kotlinx.coroutines.CoroutineScope
@@ -166,8 +169,16 @@ internal class DownloadUtils(
                 }
             }
             if (!resolved) {
-                Logger.e("Stream", "Failed to resolve download stream URL for $mediaId")
-                throw java.io.IOException("Failed to resolve stream URL for $mediaId")
+                // getStream hands a live broadcast no URL here (StreamRepositoryImpl), so say
+                // which case this is rather than a bare "failed to resolve".
+                val reason =
+                    if (LiveStreamRegistry.isLive(mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO))) {
+                        "it is a live stream"
+                    } else {
+                        "failed to resolve stream URL"
+                    }
+                Logger.e("Stream", "Cannot download $mediaId: $reason")
+                throw java.io.IOException("Cannot download $mediaId: $reason")
             }
             return@Factory dataSpecReturn
         }
@@ -191,6 +202,10 @@ internal class DownloadUtils(
                     context = context,
                     notificationHelper = downloadNotificationHelper,
                     nextNotificationId = EchoDownloadService.NOTIFICATION_ID + 1,
+                    scope = coroutineScope,
+                    isSmartDownload = { videoId ->
+                        songRepository.getSongById(videoId).lastOrNull()?.category == SongEntity.SMART_DOWNLOAD
+                    },
                 ),
             )
         }
@@ -212,6 +227,13 @@ internal class DownloadUtils(
         title: String,
         thumbnail: String,
     ) {
+        // Every download path ends here, so this is where a broadcast already known to be live
+        // is turned away. One not known yet is refused when its stream resolves.
+        if (songRepository.getSongById(videoId).lastOrNull()?.isLive == true) {
+            Logger.i("Download", "$videoId is a live stream, not downloading")
+            songRepository.updateDownloadState(videoId, DownloadState.STATE_NOT_DOWNLOADED)
+            return
+        }
         var isVideo = false
         if (dataStoreManager.watchVideoInsteadOfPlayingAudio.first() == DataStoreManager.Values.TRUE) {
             val request =
@@ -284,19 +306,7 @@ internal class DownloadUtils(
                     val videoId = it.key
                     val audio = it.value.first?.state
                     val video = it.value.second?.state
-                    val combineState =
-                        when (audio to video) {
-                            Download.STATE_COMPLETED to Download.STATE_COMPLETED -> DownloadState.STATE_DOWNLOADED
-                            Download.STATE_FAILED to Download.STATE_FAILED -> DownloadState.STATE_NOT_DOWNLOADED
-                            Download.STATE_QUEUED to Download.STATE_QUEUED -> DownloadState.STATE_PREPARING
-                            Download.STATE_COMPLETED to null -> DownloadState.STATE_DOWNLOADED
-                            Download.STATE_FAILED to null -> DownloadState.STATE_NOT_DOWNLOADED
-                            Download.STATE_QUEUED to null -> DownloadState.STATE_PREPARING
-                            null to Download.STATE_COMPLETED -> DownloadState.STATE_DOWNLOADING
-                            null to Download.STATE_QUEUED -> DownloadState.STATE_PREPARING
-                            null to Download.STATE_FAILED -> DownloadState.STATE_NOT_DOWNLOADED
-                            else -> DownloadState.STATE_DOWNLOADING
-                        }
+                    val combineState = combinedDownloadState(audio, video)
                     _downloadTask.update {
                         it.toMutableMap().apply {
                             set(videoId, combineState)
@@ -409,4 +419,13 @@ internal class DownloadUtils(
             },
         )
     }
+}
+
+/** A failed audio or video component must never leave the combined download stuck as downloading. */
+@UnstableApi
+internal fun combinedDownloadState(audio: Int?, video: Int?): Int = when {
+    audio == Download.STATE_FAILED || video == Download.STATE_FAILED -> DownloadState.STATE_NOT_DOWNLOADED
+    audio == Download.STATE_COMPLETED && (video == null || video == Download.STATE_COMPLETED) -> DownloadState.STATE_DOWNLOADED
+    audio == Download.STATE_QUEUED && (video == null || video == Download.STATE_QUEUED) -> DownloadState.STATE_PREPARING
+    else -> DownloadState.STATE_DOWNLOADING
 }

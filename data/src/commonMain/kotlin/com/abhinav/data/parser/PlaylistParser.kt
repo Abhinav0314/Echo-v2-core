@@ -10,6 +10,7 @@ import com.abhinav.domain.data.model.searchResult.songs.Album
 import com.abhinav.domain.data.model.searchResult.songs.Artist
 import com.abhinav.domain.data.model.searchResult.songs.Thumbnail
 import com.abhinav.domain.extension.now
+import com.abhinav.domain.utils.LIVE_RESULT_TYPE
 import com.abhinav.kotlinytmusicscraper.models.MusicShelfRenderer
 import com.abhinav.kotlinytmusicscraper.models.SectionListRenderer
 import com.abhinav.kotlinytmusicscraper.models.response.BrowseResponse
@@ -329,7 +330,7 @@ internal fun parsePlaylistData(
                     videoType = renderer?.musicVideoType,
                     category = null,
                     feedbackTokens = null,
-                    resultType = null,
+                    resultType = if (renderer?.isLive == true) LIVE_RESULT_TYPE else null,
                     year = null,
                 )
             if (track.videoId != "") {

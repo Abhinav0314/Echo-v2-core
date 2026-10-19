@@ -7,6 +7,7 @@ import com.abhinav.domain.mediaservice.handler.DownloadHandler
 import com.abhinav.domain.notification.DesktopNotificationManager
 import com.abhinav.domain.repository.SongRepository
 import com.abhinav.domain.repository.StreamRepository
+import com.abhinav.domain.utils.isLive
 import com.abhinav.domain.utils.toTrack
 import com.abhinav.logger.Logger
 import kotlinx.coroutines.CoroutineScope
@@ -74,6 +75,14 @@ internal class DownloadUtils(
         thumbnail: String,
     ) {
         val song = songRepository.getSongById(videoId).lastOrNull()
+        // Every download path ends here, so this is where a broadcast already known to be live is
+        // turned away. One not known yet fails inside YouTube.download, which checks the stream.
+        if (song?.isLive == true) {
+            Logger.i(TAG, "$videoId is a live stream, not downloading")
+            songRepository.updateDownloadState(videoId, DownloadState.STATE_NOT_DOWNLOADED)
+            publishDownloadTask(videoId, null)
+            return
+        }
         if (song != null) {
             songRepository.updateDownloadState(
                 videoId,

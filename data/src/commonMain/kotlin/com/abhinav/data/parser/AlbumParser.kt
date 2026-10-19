@@ -6,6 +6,7 @@ import com.abhinav.domain.data.model.browse.artist.ResultAlbum
 import com.abhinav.domain.data.model.searchResult.songs.Album
 import com.abhinav.domain.data.model.searchResult.songs.Artist
 import com.abhinav.domain.data.model.searchResult.songs.Thumbnail
+import com.abhinav.domain.utils.LIVE_RESULT_TYPE
 import com.abhinav.kotlinytmusicscraper.pages.AlbumPage
 import com.abhinav.logger.Logger
 
@@ -50,7 +51,7 @@ internal fun parseAlbumData(data: AlbumPage): AlbumBrowse {
                 videoType = songItem.musicVideoType,
                 category = null,
                 feedbackTokens = null,
-                resultType = null,
+                resultType = if (songItem.isLive) LIVE_RESULT_TYPE else null,
                 year = data.album.year.toString(),
             ),
         )

@@ -5,15 +5,21 @@ import com.abhinav.data.db.datasource.LocalDataSource
 import com.abhinav.data.extension.getFullDataFromDB
 import com.abhinav.data.mapping.metadataPatch
 import com.abhinav.data.mapping.toListTrack
+import com.abhinav.data.mapping.toYouTubeComment
+import com.abhinav.data.mapping.toYouTubeCommentsPage
 import com.abhinav.data.mapping.toSongItemForDownload
 import com.abhinav.data.mapping.toWatchEndpoint
 import com.abhinav.domain.data.entities.QueueEntity
 import com.abhinav.domain.data.entities.DownloadState
 import com.abhinav.domain.data.entities.SongEntity
 import com.abhinav.domain.data.entities.SongInfoEntity
+import com.abhinav.domain.data.entities.analytics.query.SongPlaySample
 import com.abhinav.domain.data.model.browse.album.Track
+import com.abhinav.domain.data.model.comments.YouTubeComment
+import com.abhinav.domain.data.model.comments.YouTubeCommentsPage
 import com.abhinav.domain.data.model.download.DownloadProgress
 import com.abhinav.domain.data.model.streams.YouTubeWatchEndpoint
+import com.abhinav.domain.extension.now
 import com.abhinav.domain.manager.DataStoreManager
 import com.abhinav.domain.manager.DataStoreManager.Values.TRUE
 import com.abhinav.domain.mediaservice.handler.DownloadHandler
@@ -21,6 +27,8 @@ import com.abhinav.domain.mediaservice.handler.MediaPlayerHandler
 import com.abhinav.domain.repository.SongRepository
 import com.abhinav.domain.utils.MusicVideoType
 import com.abhinav.domain.utils.Resource
+import com.abhinav.domain.utils.YouTubeLikeStatus
+import com.abhinav.domain.utils.isLive
 import com.abhinav.domain.utils.isRadioQueueId
 import com.abhinav.kotlinytmusicscraper.YouTube
 import com.abhinav.kotlinytmusicscraper.models.SongItem
@@ -29,6 +37,7 @@ import com.abhinav.kotlinytmusicscraper.models.response.LikeStatus
 import com.abhinav.kotlinytmusicscraper.pages.NextPage
 import com.abhinav.kotlinytmusicscraper.parser.getPlaylistContinuation
 import com.abhinav.logger.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
@@ -39,16 +48,24 @@ import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.toInstant
 import org.koin.mp.KoinPlatform.getKoin
+import kotlin.math.pow
 
 private const val TAG = "SongRepositoryImpl"
+private const val COMMENTS_TAG = "Comments"
 
 internal class SongRepositoryImpl(
     private val dataStoreManager: DataStoreManager,
     private val localDataSource: LocalDataSource,
     private val youTube: YouTube,
 ) : SongRepository {
+    override suspend fun getRecentSong(limit: Int, offset: Int) = withContext(Dispatchers.IO) { localDataSource.getRecentSong(limit, offset) }
+
     override fun getAllSongs(limit: Int): Flow<List<SongEntity>> =
         flow {
             emit(localDataSource.getAllSongs(limit))
@@ -120,6 +137,85 @@ internal class SongRepositoryImpl(
             }
             pending.size
         }
+
+    override suspend fun runSmartDownloads(count: Int): Int =
+        withContext(Dispatchers.IO) {
+            val mark = SongEntity.SMART_DOWNLOAD
+            var queued = 0
+            try {
+                // Marks on songs that are no longer downloaded, or that the user now keeps (liked while
+                // liked songs are auto-downloaded), come off first, so neither counts toward the limit
+                // nor gets removed below. Album and playlist download states are not asked: opening an
+                // album whose tracks are all downloaded marks it downloaded, which would claim songs
+                // the user never claimed.
+                localDataSource.clearCategoryFromNotDownloaded(mark)
+                if (dataStoreManager.autoDownloadLikedSongs.first() == TRUE) localDataSource.clearCategoryFromLiked(mark)
+
+                val nowTime = now()
+                val since = LocalDateTime(nowTime.date.minus(SMART_DOWNLOADS_WINDOW_DAYS, DateTimeUnit.DAY), nowTime.time)
+                val top = mutableListOf<SongEntity>()
+                for (videoId in rankBySmartDownloadScore(localDataSource.getSongPlaysSince(since), nowTime)) {
+                    if (top.size >= count) break
+                    val song = localDataSource.getSong(videoId) ?: continue
+                    // Only what YouTube confirms is a song: videos, podcasts, live streams and rows of
+                    // unknown type stay out.
+                    if (!MusicVideoType.isAudio(song.videoType) || song.isLive) continue
+                    // Downloaded or downloading without the mark: the user downloaded it themselves.
+                    if (song.downloadState != DownloadState.STATE_NOT_DOWNLOADED && song.category != mark) continue
+                    top += song
+                }
+
+                top.filter { it.downloadState == DownloadState.STATE_NOT_DOWNLOADED }.forEach { song ->
+                    // No row updated means the song was deleted meanwhile, and its file would belong to no row.
+                    if (localDataSource.updateSongCategory(song.videoId, mark) > 0) {
+                        downloadHandler.downloadTrack(song.videoId, song.title, song.thumbnails.orEmpty())
+                        queued++
+                    }
+                }
+
+                // FIFO: the oldest marked download goes first, but never one still in today's top.
+                val keep = top.mapTo(HashSet()) { it.videoId }
+                val marked = localDataSource.getSongsByCategory(mark)
+                var removed = 0
+                for (song in marked) {
+                    if (marked.size - removed <= count) break
+                    if (song.videoId in keep) continue
+                    // File first, mark second: if the process dies in between, the next pass finds the
+                    // mark on a song that is no longer downloaded and clears it.
+                    downloadHandler.removeDownload(song.videoId)
+                    localDataSource.updateSongCategory(song.videoId, null)
+                    removed++
+                }
+                Logger.i(TAG, "Smart downloads: ${top.size} kept, $queued queued, $removed removed")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A service start refused because the app went to the background, or a database error,
+                // ends the pass here instead of crashing the app; the rest waits for the next pass.
+                Logger.e(TAG, "Smart downloads stopped after $queued queued (type=${e::class.simpleName})")
+            }
+            queued
+        }
+
+    override suspend fun clearSmartDownloads() {
+        withContext(Dispatchers.IO) {
+            val mark = SongEntity.SMART_DOWNLOAD
+            try {
+                // Songs the user now keeps only lose the mark; every other marked song is removed.
+                if (dataStoreManager.autoDownloadLikedSongs.first() == TRUE) localDataSource.clearCategoryFromLiked(mark)
+                val marked = localDataSource.getSongsByCategory(mark)
+                marked.forEach { song ->
+                    downloadHandler.removeDownload(song.videoId)
+                    localDataSource.updateSongCategory(song.videoId, null)
+                }
+                Logger.i(TAG, "Smart downloads off: ${marked.size} removed")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e(TAG, "Smart downloads clear stopped (type=${e::class.simpleName})")
+            }
+        }
+    }
 
     /**
      * The order below is the whole feature.
@@ -304,11 +400,6 @@ internal class SongRepositoryImpl(
         )
     }
 
-    override suspend fun getRecentSong(
-        limit: Int,
-        offset: Int,
-    ) = localDataSource.getRecentSongs(limit, offset)
-
     override suspend fun insertSongInfo(songInfo: SongInfoEntity) =
         withContext(Dispatchers.IO) {
             localDataSource.insertSongInfo(songInfo)
@@ -473,16 +564,22 @@ Logger.e("Repository", "Request failed", exception)
             }
         }.flowOn(Dispatchers.IO)
 
-    override suspend fun getLikeStatus(videoId: String): Flow<Boolean> =
+    override suspend fun getLikeStatus(videoId: String): Flow<YouTubeLikeStatus> =
         flow {
             runCatching {
                 youTube
                     .getLikedInfo(videoId)
                     .onSuccess {
-                        if (it == LikeStatus.LIKE) emit(true) else emit(false)
+                        emit(
+                            when (it) {
+                                LikeStatus.LIKE -> YouTubeLikeStatus.LIKE
+                                LikeStatus.DISLIKE -> YouTubeLikeStatus.DISLIKE
+                                LikeStatus.INDIFFERENT -> YouTubeLikeStatus.INDIFFERENT
+                            },
+                        )
                     }.onFailure {
                         Logger.e("Repository", "Request failed", it)
-                        emit(false)
+                        emit(YouTubeLikeStatus.INDIFFERENT)
                     }
             }
         }
@@ -500,6 +597,23 @@ Logger.e("Repository", "Request failed", exception)
                             emit(it)
                         }.onFailure {
                             Logger.e("Repository", "Request failed", it)
+                            emit(0)
+                        }
+                }
+            }
+        }.flowOn(Dispatchers.IO)
+
+    override suspend fun addToYouTubeDisliked(mediaId: String?): Flow<Int> =
+        flow {
+            if (mediaId != null) {
+                runCatching {
+                    youTube
+                        .addToDisliked(mediaId)
+                        .onSuccess {
+                            Logger.d(TAG, "Disliked -> Success: $it")
+                            emit(it)
+                        }.onFailure {
+                            Logger.e("Repository", "Dislike request failed (type=${it::class.simpleName})")
                             emit(0)
                         }
                 }
@@ -576,6 +690,77 @@ Logger.e("Repository", "Request failed", exception)
             }
         }.flowOn(Dispatchers.IO)
 
+    override fun getComments(videoId: String): Flow<Resource<YouTubeCommentsPage?>> =
+        flow {
+            youTube
+                .comments(videoId)
+                .onSuccess {
+                    Logger.i(
+                        COMMENTS_TAG,
+                        if (it == null) "Comments for $videoId: turned off" else "Comments for $videoId: ${it.header?.countText}, ${it.comments.size} on the first page",
+                    )
+                    emit(Resource.Success<YouTubeCommentsPage?>(it?.toYouTubeCommentsPage()))
+                }
+                .onFailure {
+                    Logger.e(COMMENTS_TAG, "Comments for $videoId failed (type=${it::class.simpleName})")
+                    emit(Resource.Error<YouTubeCommentsPage?>("Couldn't finish this comment request. Check your connection and YouTube sign-in, then try again."))
+                }
+        }.flowOn(Dispatchers.IO)
+
+    override fun getCommentsPage(token: String): Flow<Resource<YouTubeCommentsPage>> =
+        flow {
+            youTube
+                .commentsPage(token)
+                .onSuccess { emit(Resource.Success(it.toYouTubeCommentsPage())) }
+                .onFailure {
+                    Logger.e(COMMENTS_TAG, "Comments page failed (type=${it::class.simpleName})")
+                    emit(Resource.Error<YouTubeCommentsPage>("Couldn't finish this comment request. Check your connection and YouTube sign-in, then try again."))
+                }
+        }.flowOn(Dispatchers.IO)
+
+    override fun postComment(
+        createCommentParams: String,
+        text: String,
+    ): Flow<Resource<YouTubeComment?>> =
+        flow {
+            youTube
+                .createComment(createCommentParams, text)
+                .onSuccess {
+                    Logger.i(COMMENTS_TAG, "Comment posted, returned=${it != null}")
+                    emit(Resource.Success<YouTubeComment?>(it?.toYouTubeComment()))
+                }.onFailure {
+                    Logger.e(COMMENTS_TAG, "Posting a comment failed (type=${it::class.simpleName})")
+                    emit(Resource.Error<YouTubeComment?>("Couldn't finish this comment request. Check your connection and YouTube sign-in, then try again."))
+                }
+        }.flowOn(Dispatchers.IO)
+
+    override fun postCommentReply(
+        createReplyParams: String,
+        text: String,
+    ): Flow<Resource<YouTubeComment?>> =
+        flow {
+            youTube
+                .createCommentReply(createReplyParams, text)
+                .onSuccess {
+                    Logger.i(COMMENTS_TAG, "Reply posted, returned=${it != null}")
+                    emit(Resource.Success<YouTubeComment?>(it?.toYouTubeComment()))
+                }.onFailure {
+                    Logger.e(COMMENTS_TAG, "Posting a reply failed (type=${it::class.simpleName})")
+                    emit(Resource.Error<YouTubeComment?>("Couldn't finish this comment request. Check your connection and YouTube sign-in, then try again."))
+                }
+        }.flowOn(Dispatchers.IO)
+
+    override fun performCommentAction(action: String): Flow<Resource<Unit>> =
+        flow {
+            youTube
+                .performCommentAction(action)
+                .onSuccess { emit(Resource.Success(Unit)) }
+                .onFailure {
+                    Logger.e(COMMENTS_TAG, "Comment action failed (type=${it::class.simpleName})")
+                    emit(Resource.Error<Unit>("Couldn't finish this comment request. Check your connection and YouTube sign-in, then try again."))
+                }
+        }.flowOn(Dispatchers.IO)
+
     override fun getRadioFromEndpoint(endpoint: YouTubeWatchEndpoint): Flow<Resource<Pair<List<Track>, String?>>> =
         flow {
             runCatching {
@@ -593,4 +778,37 @@ Logger.e("Repository", "Request failed", exception)
                     }
             }
         }
+}
+
+private const val SMART_DOWNLOADS_WINDOW_DAYS = 30
+private const val SMART_DOWNLOADS_HALF_LIFE_DAYS = 14.0
+private const val MILLIS_PER_DAY = 86_400_000.0
+
+/**
+ * The songs in [plays], best Smart downloads score first. Each play adds how much of the song was
+ * heard (0..1; a song with no stored length counts as heard in full) times how recent it is, halving
+ * every 14 days: a song played through this week outranks one played more often a month ago, and a
+ * play skipped at a quarter counts a quarter. Ties go to the song played most recently.
+ *
+ * Both sides are encoded the way `Converters` stores timestamps (the local wall clock read as UTC),
+ * so their difference is the real age whatever the device's time zone.
+ */
+internal fun rankBySmartDownloadScore(
+    plays: List<SongPlaySample>,
+    now: LocalDateTime,
+): List<String> {
+    val nowMillis = now.toInstant(TimeZone.UTC).toEpochMilliseconds()
+    val scores = HashMap<String, Double>()
+    val lastPlayed = HashMap<String, Long>()
+    for (play in plays) {
+        val playedMillis = play.timestamp.toInstant(TimeZone.UTC).toEpochMilliseconds()
+        val heard =
+            if (play.durationSecond > 0) (play.listenedSecond.toDouble() / play.durationSecond).coerceIn(0.0, 1.0) else 1.0
+        val ageDays = ((nowMillis - playedMillis) / MILLIS_PER_DAY).coerceAtLeast(0.0)
+        scores[play.videoId] = (scores[play.videoId] ?: 0.0) + heard * 0.5.pow(ageDays / SMART_DOWNLOADS_HALF_LIFE_DAYS)
+        lastPlayed[play.videoId] = maxOf(lastPlayed[play.videoId] ?: playedMillis, playedMillis)
+    }
+    return scores.keys.sortedWith(
+        compareByDescending<String> { scores.getValue(it) }.thenByDescending { lastPlayed.getValue(it) },
+    )
 }

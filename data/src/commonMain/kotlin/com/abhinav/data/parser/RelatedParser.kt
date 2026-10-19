@@ -3,6 +3,7 @@ package com.abhinav.data.parser
 import com.abhinav.domain.data.model.browse.album.Track
 import com.abhinav.domain.data.model.searchResult.songs.Album
 import com.abhinav.domain.data.model.searchResult.songs.Artist
+import com.abhinav.domain.utils.LIVE_RESULT_TYPE
 import com.abhinav.kotlinytmusicscraper.models.PlaylistPanelRenderer
 import com.abhinav.kotlinytmusicscraper.utils.parseTime
 
@@ -94,7 +95,7 @@ internal fun parseRelated(data: List<PlaylistPanelRenderer.Content>?): ArrayList
                     videoType = musicVideoType,
                     category = "MUSIC",
                     feedbackTokens = null,
-                    resultType = null,
+                    resultType = if (track.playlistPanelVideoRenderer?.isLive == true) LIVE_RESULT_TYPE else null,
                     year = null,
                 ),
             )

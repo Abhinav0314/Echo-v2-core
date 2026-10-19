@@ -417,6 +417,7 @@ fun MusicShelfRenderer.Content.toSongItem(): SongItem? {
                 ?: LikeStatus.INDIFFERENT,
         badges = renderer.badges?.toSongBadges(),
         musicVideoType = renderer.musicVideoType,
+        isLive = renderer.isLive,
     )
 }
 

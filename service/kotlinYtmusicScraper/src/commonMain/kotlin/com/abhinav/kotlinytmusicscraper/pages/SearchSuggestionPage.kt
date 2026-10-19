@@ -37,6 +37,7 @@ object SearchSuggestionPage {
                     duration = metadata.duration,
                     view = null,
                     musicVideoType = renderer.musicVideoType,
+                    isLive = renderer.isLive,
                 )
             }
             renderer.isSong -> {
@@ -61,6 +62,7 @@ object SearchSuggestionPage {
                             it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
                         } != null,
                     musicVideoType = renderer.musicVideoType,
+                    isLive = renderer.isLive,
                 )
             }
             renderer.isArtist -> {
