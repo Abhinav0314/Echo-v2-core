@@ -1408,7 +1408,9 @@ internal class DataStoreManagerImpl(
 
     override val killServiceOnExit: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[KILL_SERVICE_ON_EXIT] ?: FALSE
+            // Swiping Echo out of Recent apps is an explicit close. Home/lock-screen
+            // playback is unaffected, and a saved opt-out still keeps playing.
+            preferences[KILL_SERVICE_ON_EXIT] ?: TRUE
         }
 
     override suspend fun setKillServiceOnExit(kill: Boolean) {
